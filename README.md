@@ -1,16 +1,16 @@
-# React + Vite
+# Rohan Adepu · Portfolio and Travel Atlas
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The portfolio and atlas share a single Vite build, navigation, and visual style. The atlas has a COBE world view and MapLibre field journals. The example visits and journeys are illustrative. The Kyoto image is generated for the preview.
 
-Currently, two official plugins are available:
+## Run locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Use Node.js 22.12+ and pnpm.
 
-## React Compiler
+```sh
+pnpm install
+pnpm dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The portfolio is at `/`. The atlas is at `/atlas/`. Use `pnpm build` to check TypeScript and produce the static site in `dist/`.
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The header schedule uses Mountain Time (`America/Denver`). The atlas loads OpenFreeMap street tiles when you open a city or a road trip. The journal entries remain usable with the map unavailable. The `atlas-redesign` branch is excluded from Vercel’s automatic deployments.

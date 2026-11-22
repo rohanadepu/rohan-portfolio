@@ -10,7 +10,10 @@ interface GlobePin {
 const radians = Math.PI / 180;
 const radius = 0.8; // COBE's sphere radius in clip space.
 const initialView = { phi: -Math.PI / 2 - 125 * radians, theta: 25 * radians, scale: 1 };
+export type GlobeCamera = typeof initialView;
+export const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const ease = (progress: number) => progress * progress * (3 - 2 * progress);
 
 export function setupGlobe(
   canvas: HTMLCanvasElement, roads: HTMLCanvasElement, pins: HTMLElement,
@@ -33,6 +36,7 @@ export function setupGlobe(
   let routes: Coordinates[][] = [];
   let markers: { pin: GlobePin; element: HTMLAnchorElement }[] = [];
   let pendingFrame = 0;
+  let cancelMotion: (() => void) | undefined;
 
   function position([latitude, longitude]: Coordinates) {
     const lat = latitude * radians;
@@ -88,10 +92,61 @@ export function setupGlobe(
     requestPaint();
   }
 
-  function focus([latitude, longitude]: Coordinates) {
-    phi = -Math.PI / 2 - longitude * radians;
-    theta = latitude * radians;
-    requestPaint();
+  function camera(): GlobeCamera {
+    return { phi, theta, scale };
+  }
+
+  function moveTo(target: GlobeCamera, duration = 850, approach = false): Promise<boolean> {
+    cancelMotion?.();
+    const start = camera();
+    const rotation = Math.atan2(Math.sin(target.phi - start.phi), Math.cos(target.phi - start.phi));
+    const tilt = target.theta - start.theta;
+    const zoomDistance = target.scale - start.scale;
+    if (reducedMotion.matches || Math.max(Math.abs(rotation), Math.abs(tilt), Math.abs(zoomDistance)) < 0.001) {
+      ({ phi, theta, scale } = target);
+      paint();
+      return Promise.resolve(true);
+    }
+
+    return new Promise(resolve => {
+      const started = performance.now();
+      let frame: number;
+      cancelMotion = () => {
+        cancelAnimationFrame(frame);
+        cancelMotion = undefined;
+        resolve(false);
+      };
+      function step(now: number) {
+        const progress = clamp((now - started) / duration, 0, 1);
+        const rotationProgress = ease(approach ? Math.min(progress / 0.8, 1) : progress);
+        const zoomProgress = ease(approach ? Math.max(0, (progress - 0.22) / 0.78) : progress);
+        phi = start.phi + rotation * rotationProgress;
+        theta = start.theta + tilt * rotationProgress;
+        scale = start.scale + zoomDistance * zoomProgress;
+        paint();
+        if (progress < 1) {
+          frame = requestAnimationFrame(step);
+        } else {
+          cancelMotion = undefined;
+          resolve(true);
+        }
+      }
+      frame = requestAnimationFrame(step);
+    });
+  }
+
+  async function focus(coordinates: Coordinates, open = false) {
+    const [latitude, longitude] = coordinates;
+    pins.querySelector('.located')?.classList.remove('located');
+    const arrived = await moveTo({
+      phi: -Math.PI / 2 - longitude * radians,
+      theta: latitude * radians,
+      scale: open ? Math.max(2.45, scale * 1.12) : Math.max(1.18, scale),
+    }, open ? 1400 : 900, open);
+    if (arrived && !open) {
+      markers.find(({ pin }) => pin.coordinates === coordinates)?.element.classList.add('located');
+    }
+    return arrived;
   }
 
   const pointers = new Map<number, { x: number; y: number }>();
@@ -102,6 +157,7 @@ export function setupGlobe(
   }
 
   canvas.addEventListener('pointerdown', event => {
+    cancelMotion?.();
     canvas.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     canvas.classList.add('dragging');
@@ -114,7 +170,7 @@ export function setupGlobe(
     if (startingDistance > 0) {
       zoom(pinchDistance() / startingDistance);
     } else if (pointers.size === 1) {
-      phi -= (event.clientX - previous.x) / 180 / scale;
+      phi += (event.clientX - previous.x) / 180 / scale;
       theta = clamp(theta + (event.clientY - previous.y) / 180 / scale, -1.5, 1.5);
       requestPaint();
     }
@@ -126,6 +182,7 @@ export function setupGlobe(
   canvas.addEventListener('wheel', event => {
     if (event.ctrlKey || document.activeElement === canvas) {
       event.preventDefault();
+      cancelMotion?.();
       zoom(Math.exp(-clamp(event.deltaY, -100, 100) * 0.002));
     }
   }, { passive: false });
@@ -133,21 +190,22 @@ export function setupGlobe(
     const actions: Record<string, () => void> = {
       ArrowLeft: () => { phi -= 0.15; },
       ArrowRight: () => { phi += 0.15; },
-      ArrowUp: () => { theta = clamp(theta + 0.15, -1.5, 1.5); },
-      ArrowDown: () => { theta = clamp(theta - 0.15, -1.5, 1.5); },
+      ArrowUp: () => { theta = clamp(theta - 0.15, -1.5, 1.5); },
+      ArrowDown: () => { theta = clamp(theta + 0.15, -1.5, 1.5); },
       '+': () => zoom(1.2), '=': () => zoom(1.2), '-': () => zoom(1 / 1.2),
     };
     if (!Object.hasOwn(actions, event.key)) return;
     event.preventDefault();
+    cancelMotion?.();
     actions[event.key]();
     requestPaint();
   });
-  controls.zoomIn.addEventListener('click', () => zoom(1.2));
-  controls.zoomOut.addEventListener('click', () => zoom(1 / 1.2));
-  controls.reset.addEventListener('click', () => {
-    ({ phi, theta, scale } = initialView);
-    requestPaint();
-  });
+  function easeZoom(factor: number) {
+    void moveTo({ ...camera(), scale: clamp(scale * factor, 0.75, 2.6) }, 280);
+  }
+  controls.zoomIn.addEventListener('click', () => easeZoom(1.2));
+  controls.zoomOut.addEventListener('click', () => easeZoom(1 / 1.2));
+  controls.reset.addEventListener('click', () => { void moveTo(initialView); });
 
   new ResizeObserver(([entry]) => {
     const width = Math.round(entry.contentRect.width);
@@ -162,7 +220,11 @@ export function setupGlobe(
   window.setTimeout(requestPaint, 250);
 
   return {
+    camera,
+    moveTo,
     focus,
+    stop: () => cancelMotion?.(),
+    markerLocation: (anchor: HTMLAnchorElement) => markers.find(({ element }) => element === anchor)?.pin.coordinates,
     setContent(items: GlobePin[], arcs: Arc[], roadPaths: Coordinates[][]) {
       routes = roadPaths;
       markers = items.map(pin => {

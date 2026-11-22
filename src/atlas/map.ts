@@ -72,7 +72,8 @@ export function mountMap(container: HTMLElement, stops: MapStop[], path: Coordin
       if (center && stops[index]) {
         map.easeTo({
           center: longitudeFirst(stops[index].coordinates),
-          duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 270,
+          zoom: Math.max(map.getZoom(), 14),
+          duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 610,
         });
       }
     },

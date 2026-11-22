@@ -1,7 +1,7 @@
 import '../status';
 import type { Arc } from 'cobe';
 import { cities, journeys, coordinateLabel, type City, type Coordinates, type Journey } from './data';
-import { setupGlobe } from './globe';
+import { reducedMotion, setupGlobe, type GlobeCamera } from './globe';
 import type { mountMap } from './map';
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -29,7 +29,8 @@ const year = byId<HTMLSelectElement>('year-filter');
 const transport = byId<HTMLSelectElement>('transport');
 const placesButton = byId<HTMLButtonElement>('places-mode');
 const journeysButton = byId<HTMLButtonElement>('journeys-mode');
-const globe = setupGlobe(byId('globe'), byId('roads'), byId('globe-pins'), {
+const globeCanvas = byId<HTMLCanvasElement>('globe');
+const globe = setupGlobe(globeCanvas, byId('roads'), byId('globe-pins'), {
   zoomIn: byId('zoom-in'), zoomOut: byId('zoom-out'), reset: byId('reset'),
 });
 if (!globe) {
@@ -47,6 +48,29 @@ let mode: 'places' | 'journeys' = 'places';
 let currentDetail = '';
 let map: ReturnType<typeof mountMap> | undefined;
 let selectedPlace = '';
+let returnCamera: GlobeCamera | undefined;
+let departure: Animation | undefined;
+
+function showGlobe() {
+  const stage = globeCanvas.parentElement!;
+  const { top, bottom } = stage.getBoundingClientRect();
+  if (top < 0 || bottom > window.innerHeight) {
+    stage.scrollIntoView({ block: 'center', behavior: reducedMotion.matches ? 'instant' : 'smooth' });
+  }
+}
+
+function interruptTransition() {
+  globe?.stop();
+  departure?.cancel();
+  departure = undefined;
+}
+
+function reveal(element: Element, delay = 0, duration = 480) {
+  return element.animate([
+    { opacity: 0, translate: '0 9px' },
+    { opacity: 1, translate: '0 0' },
+  ], { delay, duration, fill: 'backwards', easing: 'cubic-bezier(.22,.61,.36,1)' });
+}
 
 function atlasUrl(values: Record<string, string> = {}) {
   const params = new URLSearchParams();
@@ -76,7 +100,11 @@ function addListItem(title: string, subtitle: string, href: string, location: Co
     const focus = node('button', 'locate', 'Locate');
     focus.type = 'button';
     focus.setAttribute('aria-label', `Locate ${title} on the globe`);
-    focus.addEventListener('click', () => globe.focus(location));
+    focus.addEventListener('click', () => {
+      interruptTransition();
+      showGlobe();
+      void globe.focus(location);
+    });
     article.append(focus);
   }
   article.append(...children);
@@ -163,7 +191,7 @@ async function attachMap(container: HTMLElement, stops: City['places'] | Journey
     const { mountMap } = await import('./map');
     if (!container.isConnected) return;
     map = mountMap(container, stops, path, select);
-    updatePlaceSelection(false, false);
+    updatePlaceSelection(Boolean(selectedPlace), false);
   } catch {
     if (container.isConnected) {
       container.replaceChildren(node('p', 'unavailable', 'The map is unavailable. You can still browse the entries below.'));
@@ -171,7 +199,7 @@ async function attachMap(container: HTMLElement, stops: City['places'] | Journey
   }
 }
 
-function updatePlaceSelection(center: boolean, scroll: boolean) {
+function updatePlaceSelection(center: boolean, scroll: boolean, smooth = false) {
   const entries = [...detail.querySelectorAll<HTMLElement>('.field-entry')];
   const index = entries.findIndex(entry => entry.id === selectedPlace);
   entries.forEach((entry, i) => {
@@ -179,7 +207,11 @@ function updatePlaceSelection(center: boolean, scroll: boolean) {
     entry.querySelector('.place-select')?.setAttribute('aria-pressed', String(i === index));
   });
   map?.select(index, center);
-  if (scroll) entries[index]?.scrollIntoView({ block: 'nearest' });
+  if (scroll) scrollToEntry(entries[index], smooth);
+}
+
+function scrollToEntry(entry: HTMLElement | undefined, smooth = true) {
+  entry?.scrollIntoView({ block: 'nearest', behavior: smooth && !reducedMotion.matches ? 'smooth' : 'instant' });
 }
 
 function showCity(city: City) {
@@ -228,7 +260,7 @@ function showCity(city: City) {
     if (!place) return;
     selectedPlace = place.id;
     history.replaceState(null, '', cityLink(city.id, place.id));
-    updatePlaceSelection(true, scroll);
+    updatePlaceSelection(true, scroll, true);
   }
   if (!visiblePlaces.length) {
     mapContainer.remove();
@@ -246,7 +278,7 @@ function showJourney(journey: Journey) {
     const container = node('div', 'detail-map');
     detail.append(container, node('p', 'eyebrow map-caption', 'Approximate line between stops'));
     void attachMap(container, journey.stops, journey.stops.map(stop => stop.coordinates),
-      index => detail.querySelectorAll('li')[index]?.scrollIntoView({ block: 'nearest' }),
+      index => scrollToEntry(detail.querySelectorAll('li')[index]),
     );
   }
   const stops = node('ol', 'itinerary');
@@ -259,17 +291,24 @@ function showJourney(journey: Journey) {
   detail.append(stops);
 }
 
-function renderRoute(moveFocus = false) {
+function readDestination(params: URLSearchParams) {
+  const city = cities.find(item => item.id === params.get('city'));
+  const journey = journeys.find(item => item.id === params.get('journey'));
+  return { city, journey };
+}
+
+function renderRoute(moveFocus = false, animate = false) {
   const params = new URLSearchParams(location.search);
   mode = params.get('view') === 'journeys' ? 'journeys' : 'places';
   const selectedYear = params.get('year') ?? '';
   year.value = availableYears.has(Number(selectedYear)) ? selectedYear : '';
-  const city = cities.find(city => city.id === params.get('city'));
-  const journey = journeys.find(journey => journey.id === params.get('journey'));
+  const { city, journey } = readDestination(params);
   const nextDetail = city ? `city-${city.id}-${year.value}` : journey ? `journey-${journey.id}` : '';
   selectedPlace = params.get('place') ?? '';
+  const changed = nextDetail !== currentDetail;
+  const animateChange = changed && animate && !reducedMotion.matches;
 
-  if (nextDetail !== currentDetail) {
+  if (changed) {
     currentDetail = nextDetail;
     map?.hide();
     map = undefined;
@@ -283,23 +322,83 @@ function renderRoute(moveFocus = false) {
       (nextDetail ? detail.querySelector('h1') : byId('atlas-title'))?.focus({ preventScroll: true });
     }
   }
-  if (nextDetail) updatePlaceSelection(false, Boolean(selectedPlace));
-  else renderOverview();
+  if (nextDetail) {
+    updatePlaceSelection(false, Boolean(selectedPlace) && !animateChange);
+    if (animateChange) {
+      const sections = [...detail.children];
+      const entered = sections.map((section, index) => reveal(section, 120 * index));
+      if (selectedPlace) {
+        const destination = selectedPlace;
+        void entered.at(-1)?.finished.then(() => {
+          if (currentDetail === nextDetail && selectedPlace === destination) {
+            updatePlaceSelection(false, true, true);
+          }
+        }).catch(() => {});
+      }
+    }
+  } else {
+    renderOverview();
+    if (changed && returnCamera) {
+      void globe?.moveTo(returnCamera);
+      returnCamera = undefined;
+    }
+    if (animateChange) reveal(overview);
+  }
 }
 
 function switchMode(value: typeof mode) {
   if (mode === value) return;
+  interruptTransition();
   history.pushState(null, '', atlasUrl({ view: value === 'places' ? '' : value }));
   renderRoute();
+  if (!reducedMotion.matches) reveal(list, 0, 300);
+}
+
+async function openAtlasLink(anchor: HTMLAnchorElement) {
+  if (anchor.href === location.href) return;
+  interruptTransition();
+  const { city, journey } = readDestination(new URL(anchor.href).searchParams);
+  const target = city?.coordinates ?? globe?.markerLocation(anchor) ?? journey?.stops[0]?.coordinates;
+  const fromOverview = !overview.hidden;
+  const before = fromOverview ? globe?.camera() : undefined;
+  if (globe && fromOverview && target) {
+    if (city || journey?.mode === 'drive') void import('./map').catch(() => {});
+    showGlobe();
+    if (!(await globe.focus(target, true))) return;
+  }
+
+  if (!reducedMotion.matches && (!fromOverview || target)) {
+    const fade = (fromOverview ? overview : detail).animate(
+      [{ opacity: 1 }, { opacity: 0 }],
+      { duration: 175, fill: 'forwards', easing: 'ease-in' },
+    );
+    departure = fade;
+    if (!(await fade.finished.then(() => true, () => false))) return;
+  }
+
+  if (before && target) returnCamera = before;
+  history.pushState(null, '', anchor.href);
+  departure?.cancel();
+  departure = undefined;
+  renderRoute(true, true);
 }
 
 placesButton.addEventListener('click', () => switchMode('places'));
 journeysButton.addEventListener('click', () => switchMode('journeys'));
-search.addEventListener('input', renderOverview);
-transport.addEventListener('change', renderOverview);
+search.addEventListener('input', () => {
+  interruptTransition();
+  renderOverview();
+});
+transport.addEventListener('change', () => {
+  interruptTransition();
+  renderOverview();
+  if (!reducedMotion.matches) reveal(list, 0, 300);
+});
 year.addEventListener('change', () => {
+  interruptTransition();
   history.replaceState(null, '', atlasUrl());
   renderRoute();
+  if (!reducedMotion.matches) reveal(list, 0, 300);
 });
 document.addEventListener('click', event => {
   const anchor = event.target instanceof Element ? event.target.closest('a') : null;
@@ -307,9 +406,11 @@ document.addEventListener('click', event => {
       event.shiftKey || event.altKey || anchor.target || anchor.origin !== location.origin ||
       anchor.pathname !== '/atlas/') return;
   event.preventDefault();
-  if (anchor.href !== location.href) history.pushState(null, '', anchor.href);
-  renderRoute(true);
+  void openAtlasLink(anchor);
 });
-window.addEventListener('popstate', () => renderRoute(true));
+window.addEventListener('popstate', () => {
+  interruptTransition();
+  renderRoute(true, true);
+});
 
 renderRoute();

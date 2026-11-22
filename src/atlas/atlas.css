@@ -117,6 +117,17 @@ select, input[type="search"] { background: var(--paper); border: 1px solid var(-
 .itinerary a { display: inline-block; margin-top: .5rem; }
 .no-results, .unavailable { color: var(--quiet); padding: 1.15rem; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.globe-pin.located::before { outline: 1px solid var(--ink); outline-offset: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .view-switch button, .globe-actions button, .locate, .field-entry, .globe-pin span {
+    transition: background-color 180ms ease, color 180ms ease;
+  }
+  .globe-pin.located::before { animation: locate-pin 850ms ease-out; }
+  @keyframes locate-pin {
+    from { box-shadow: 0 0 0 0 rgb(38 37 31 / .48); }
+    to { box-shadow: 0 0 0 14px rgb(38 37 31 / 0); }
+  }
+}
 @media (max-width: 770px) {
   .atlas-layout { grid-template-columns: 1fr; }
   .globe-panel { padding: 0 0 1rem; }

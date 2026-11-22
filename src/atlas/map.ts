@@ -1,4 +1,4 @@
-import { LngLatBounds, Map, Marker, setWorkerUrl } from 'maplibre-gl';
+import { LngLatBounds, Map, Marker, setWorkerUrl, type TransformStyleFunction } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { Coordinates } from './data';
@@ -15,9 +15,37 @@ export const longitudeFirst = ([latitude, longitude]: Coordinates): [number, num
 export function mountMap(container: HTMLElement, stops: MapStop[], path: Coordinates[] | null, select: (index: number) => void) {
   const [first] = stops;
   if (!first) throw new Error('The map has no stops.');
+
+  const mapStyle = () => {
+    const style = document.documentElement.dataset.theme === 'dark' ? 'fiord' : 'positron';
+    return `https://tiles.openfreemap.org/styles/${style}`;
+  };
+  const withRoute: TransformStyleFunction | undefined = path ? (_previous, style) => ({
+    ...style,
+    sources: {
+      ...style.sources,
+      'approximate-route': {
+        type: 'geojson',
+        data: {
+          type: 'Feature', properties: {},
+          geometry: { type: 'LineString', coordinates: path.map(longitudeFirst) },
+        },
+      },
+    },
+    layers: [...style.layers, {
+      id: 'approximate-route', type: 'line', source: 'approximate-route',
+      paint: {
+        'line-color': getComputedStyle(document.documentElement).getPropertyValue('--ink'),
+        'line-width': 2.5,
+        'line-dasharray': [2, 2],
+      },
+    }],
+  }) : undefined;
+
   const map = new Map({
     container,
-    style: 'https://tiles.openfreemap.org/styles/positron',
+    style: mapStyle(),
+    transformStyle: withRoute,
     center: longitudeFirst(first.coordinates),
     zoom: 13.5,
     cooperativeGestures: true,
@@ -49,24 +77,14 @@ export function mountMap(container: HTMLElement, stops: MapStop[], path: Coordin
     map.fitBounds(bounds, { padding: 48, maxZoom: 13.75, duration: 0 });
   }
 
-  if (path) {
-    map.on('load', () => {
-      map.addSource('approximate-route', {
-        type: 'geojson',
-        data: {
-          type: 'Feature', properties: {},
-          geometry: { type: 'LineString', coordinates: path.map(longitudeFirst) },
-        },
-      });
-      map.addLayer({
-        id: 'approximate-route', type: 'line', source: 'approximate-route',
-        paint: { 'line-color': '#29271f', 'line-width': 2.5, 'line-dasharray': [2, 2] },
-      });
-    });
-  }
+  const updateStyle = () => map.setStyle(mapStyle(), { diff: false });
+  window.addEventListener('portfolio-themechange', updateStyle);
 
   return {
-    hide: () => map.remove(),
+    hide() {
+      window.removeEventListener('portfolio-themechange', updateStyle);
+      map.remove();
+    },
     select(index: number, center: boolean) {
       markers.forEach((marker, i) => marker.getElement().setAttribute('aria-pressed', String(i === index)));
       if (center && stops[index]) {

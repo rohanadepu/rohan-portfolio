@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#f7f5ef">
   <meta name="description" content="Explore Rohan Adepu’s travel atlas.">
   <title>Travel Atlas · Rohan Adepu</title>
+  <script src="/theme.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
@@ -16,8 +17,13 @@
   <div class="shell">
     <header class="masthead">
       <a class="wordmark" href="/">Rohan Adepu</a>
-      <div class="status" aria-label="Rohan's daily rhythm, based on Mountain Time">
-        <span class="status-icon" aria-hidden="true">✦</span><span id="status-text">Finding a good idea</span><span class="status-time">MT</span>
+      <div class="masthead-tools">
+        <div class="status" aria-label="Rohan's daily rhythm, based on Mountain Time">
+          <span class="status-icon" aria-hidden="true">✦</span><span id="status-text">Finding a good idea</span><span class="status-time">MT</span>
+        </div>
+        <button class="theme-toggle" type="button" aria-label="Dark mode" aria-pressed="false" title="Toggle dark mode" hidden>
+          <span class="theme-moon" aria-hidden="true">☾</span><span class="theme-sun" aria-hidden="true">☀︎</span>
+        </button>
       </div>
     </header>
     <nav class="navigation" aria-label="Site sections">

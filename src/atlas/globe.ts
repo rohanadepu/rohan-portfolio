@@ -1,4 +1,4 @@
-import createGlobe, { type Arc } from 'cobe';
+import createGlobe, { type Arc, type COBEOptions } from 'cobe';
 import type { Coordinates } from './data';
 
 interface GlobePin {
@@ -15,6 +15,16 @@ export const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const ease = (progress: number) => progress * progress * (3 - 2 * progress);
 
+type GlobePalette = Pick<COBEOptions, 'dark' | 'mapBrightness' | 'baseColor' | 'glowColor' | 'arcColor'>;
+const lightGlobe: GlobePalette = {
+  dark: 0, mapBrightness: 5.6,
+  baseColor: [0.98, 0.97, 0.945], glowColor: [0.44, 0.43, 0.4], arcColor: [0.21, 0.20, 0.17],
+};
+const darkGlobe: GlobePalette = {
+  dark: 1, mapBrightness: 3.4,
+  baseColor: [0.62, 0.60, 0.55], glowColor: [0.08, 0.08, 0.07], arcColor: [0.89, 0.86, 0.78],
+};
+
 export function setupGlobe(
   canvas: HTMLCanvasElement, roads: HTMLCanvasElement, pins: HTMLElement,
   controls: { zoomIn: HTMLButtonElement; zoomOut: HTMLButtonElement; reset: HTMLButtonElement },
@@ -25,12 +35,13 @@ export function setupGlobe(
 
   let { phi, theta, scale } = initialView;
   let size = 1;
+  const palette = () => document.documentElement.dataset.theme === 'dark' ? darkGlobe : lightGlobe;
+  const readInk = () => getComputedStyle(document.documentElement).getPropertyValue('--ink');
+  let routeColor = readInk();
   const globe = createGlobe(canvas, {
     width: size, height: size, phi, theta, scale, devicePixelRatio: dpr,
-    dark: 0, diffuse: 1.4, mapSamples: 18000, mapBrightness: 5.6,
-    baseColor: [0.98, 0.97, 0.945], glowColor: [0.44, 0.43, 0.4],
-    markerColor: [0.14, 0.13, 0.11], markerElevation: 0,
-    arcColor: [0.21, 0.20, 0.17], arcHeight: 0.22, arcWidth: 0.64, context,
+    diffuse: 1.4, mapSamples: 18000, markerColor: [0.14, 0.13, 0.11], markerElevation: 0,
+    arcHeight: 0.22, arcWidth: 0.64, context, ...palette(),
   });
   const roadContext = roads.getContext('2d');
   let routes: Coordinates[][] = [];
@@ -51,7 +62,7 @@ export function setupGlobe(
     };
   }
 
-  function paint(overrides: { arcs?: Arc[]; width?: number; height?: number } = {}) {
+  function paint(overrides: Partial<COBEOptions> = {}) {
     globe.update({ phi, theta, scale, ...overrides });
     for (const { pin, element } of markers) {
       const p = position(pin.coordinates);
@@ -62,7 +73,7 @@ export function setupGlobe(
     roadContext.setTransform(dpr, 0, 0, dpr, 0, 0);
     roadContext.clearRect(0, 0, size, size);
     roadContext.lineWidth = 1.8;
-    roadContext.strokeStyle = '#26251f';
+    roadContext.strokeStyle = routeColor;
     roadContext.setLineDash([4, 4]);
     for (const route of routes) {
       roadContext.beginPath();
@@ -215,6 +226,11 @@ export function setupGlobe(
     roads.height = Math.round(size * dpr);
     paint({ width: size, height: size });
   }).observe(canvas.parentElement!);
+
+  window.addEventListener('portfolio-themechange', () => {
+    routeColor = readInk();
+    paint(palette());
+  });
 
   // COBE decodes the land texture asynchronously and draws on the next update.
   window.setTimeout(requestPaint, 250);

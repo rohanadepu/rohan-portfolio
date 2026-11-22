@@ -1,14 +1,29 @@
 :root {
   font-family: "DM Sans", system-ui, sans-serif;
-  color: #26251f;
-  background: #f7f5ef;
+  color-scheme: light;
+  color: var(--ink);
+  background: var(--paper);
   --paper: #f7f5ef;
   --ink: #26251f;
   --quiet: #635f55;
   --line: #cec9bc;
   --tint: #eeebe2;
+  --callout: var(--ink);
+  --callout-text: var(--paper);
+  --callout-label: #cfccbf;
   --serif: "Instrument Serif", Georgia, serif;
   --mono: "IBM Plex Mono", monospace;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #181816;
+  --ink: #efede4;
+  --quiet: #b5b1a3;
+  --line: #48463f;
+  --tint: #25241f;
+  --callout: var(--tint);
+  --callout-text: var(--ink);
+  --callout-label: var(--quiet);
 }
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; }
@@ -19,15 +34,31 @@ button { cursor: pointer; }
 :focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
 [hidden] { display: none !important; }
 .shell { max-width: 1320px; margin: auto; padding: 0 clamp(1.25rem, 5vw, 5.25rem); }
-.masthead, .navigation, .tabs, .status, .socials, footer {
+.masthead, .masthead-tools, .navigation, .tabs, .status, .socials, footer {
   display: flex;
   align-items: center;
 }
 .masthead { min-height: 70px; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); }
+.masthead-tools { gap: .9rem; min-width: 0; }
 .wordmark { font-family: var(--serif); font-size: 1.75rem; text-decoration: none; white-space: nowrap; }
-.status { color: var(--quiet); gap: .55rem; font-size: .875rem; }
+.status { color: var(--quiet); gap: .55rem; font-size: .875rem; min-width: 0; }
+#status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-icon { font-size: .9rem; }
 .status-time { font: .75rem var(--mono); border: 1px solid var(--line); padding: .18rem .35rem; }
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-size: 1.23rem;
+}
+.theme-toggle:hover { background: var(--tint); }
+.theme-sun, [data-theme="dark"] .theme-moon { display: none; }
+[data-theme="dark"] .theme-sun { display: inline; }
 .navigation { border-bottom: 1px solid var(--line); gap: clamp(1.1rem, 4vw, 2.5rem); }
 .tabs { gap: clamp(1.1rem, 4vw, 2.5rem); }
 .navigation a, .tab {
@@ -63,10 +94,11 @@ p { line-height: 1.65; }
 .journey-title, .journey-place, .journey-detail { display: block; }
 .journey-title { font-weight: 650; }
 .journey-detail { font-size: .88rem; }
-.atlas-callout { display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; margin: 0 0 3rem; padding: 1.5rem clamp(1.2rem, 3.7vw, 3rem); color: var(--paper); background: var(--ink); text-decoration: none; }
+.atlas-callout { display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; margin: 0 0 3rem; padding: 1.5rem clamp(1.2rem, 3.7vw, 3rem); color: var(--callout-text); background: var(--callout); border: 1px solid var(--callout); text-decoration: none; }
+[data-theme="dark"] .atlas-callout { border-color: var(--line); }
 .atlas-callout strong { display: block; font: 3rem/1.05 var(--serif); margin: .15em 0; }
 .atlas-callout span { display: block; }
-.atlas-callout .eyebrow { color: #cfccbf; }
+.atlas-callout .eyebrow { color: var(--callout-label); }
 .callout-action { text-decoration: underline; white-space: nowrap; }
 .text-panel { padding: clamp(2.7rem, 6vw, 6rem) 0; }
 .text-panel > h2 { font: clamp(4.5rem, 12vw, 9.5rem)/.9 var(--serif); margin-bottom: .3em; }
@@ -84,9 +116,10 @@ p { line-height: 1.65; }
 footer { border-top: 1px solid var(--line); justify-content: space-between; padding: 1.2rem 0 2rem; color: var(--quiet); font: .8rem var(--mono); }
 @media (max-width: 680px) {
   .masthead { min-height: 62px; gap: .65rem; }
+  .masthead-tools { gap: .45rem; }
   .wordmark { font-size: 1.4rem; }
   .status { font-size: .75rem; gap: .3rem; }
-  .status-icon, .status-dot { display: none; }
+  .status-icon { display: none; }
   .intro { gap: 1.15rem; padding: 2rem 0 2.5rem; }
   .intro h1 { font-size: clamp(3.75rem, 14vw, 6rem); }
   .intro .eyebrow { font-size: .67rem; }

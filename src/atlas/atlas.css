@@ -45,6 +45,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.pin-stem {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: var(--pin-stem-length, 0px);
+  height: 1px;
+  transform-origin: left center;
+  transform: rotate(var(--pin-stem-angle, 0rad));
+  background: var(--ink);
+  opacity: .48;
+  pointer-events: none;
+}
 .globe-pin:hover .pin-label, .globe-pin:focus-visible .pin-label { background: var(--ink); color: var(--paper); }
 .globe-cluster { padding: 0; border: 0; background: transparent; }
 .globe-cluster::before, .globe-cluster::after { content: none; }

@@ -17,6 +17,7 @@ interface ScreenPoint {
 interface Marker {
   id: number;
   pin: GlobePin;
+  area?: { country: string; region?: string };
   vector: [number, number, number];
   element: HTMLAnchorElement;
 }
@@ -25,11 +26,36 @@ interface Group {
   x: number;
   y: number;
   members: Marker[];
+  label?: string;
+  zoomLevel?: number;
+}
+
+interface Bounds {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
 }
 
 const groupDistance = 56;
 const radians = Math.PI / 180;
-const minimumAlignment = Math.cos(18 * radians);
+const regionZoom = 2.4;
+const cityZoom = 5.5;
+const labelOffsets = [
+  [0, 0], [0, -45], [0, 45], [-44, 0], [44, 0],
+  [-36, -45], [36, -45], [-36, 45], [36, 45],
+  [-64, 0], [64, 0], [0, -90], [0, 90],
+];
+
+function areaOf(region?: string): Marker['area'] {
+  const parts = region?.split(',').map(part => part.trim()).filter(Boolean);
+  const country = parts?.pop();
+  if (!country) return;
+  return {
+    country: country === 'USA' ? 'United States' : country,
+    region: parts?.join(', ') || undefined,
+  };
+}
 
 function unitVector([latitude, longitude]: Coordinates): Marker['vector'] {
   const lat = latitude * radians;
@@ -37,10 +63,10 @@ function unitVector([latitude, longitude]: Coordinates): Marker['vector'] {
   return [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
 }
 
-function nearby(first: Marker, second: Marker) {
-  const [x, y, z] = first.vector;
-  const [otherX, otherY, otherZ] = second.vector;
-  return x * otherX + y * otherY + z * otherZ > minimumAlignment;
+function sameLocation(first: Marker, second: Marker) {
+  const [latitude, longitude] = first.pin.coordinates;
+  return Math.abs(latitude - second.pin.coordinates[0]) < .001 &&
+    Math.abs(longitude - second.pin.coordinates[1]) < .001;
 }
 
 function centerOf(members: Marker[]): Coordinates {
@@ -55,12 +81,22 @@ function centerOf(members: Marker[]): Coordinates {
   return [Math.atan2(z, Math.hypot(x, y)) / radians, Math.atan2(y, x) / radians];
 }
 
-function labelFor(members: Marker[], scale: number) {
-  const { pin } = members[0];
-  if (scale < 2.5 && pin.region && members.every(member => member.pin.region === pin.region)) {
-    return pin.region.split(',')[0];
+function groupByArea(markers: Marker[], useRegion: boolean) {
+  const byArea = new Map<string, { label: string; members: Marker[] }>();
+  for (const marker of markers) {
+    if (!marker.area) continue;
+    const { country, region } = marker.area;
+    const subdivision = useRegion ? region : undefined;
+    const key = JSON.stringify([country, subdivision]);
+    const group = byArea.get(key);
+    if (group) group.members.push(marker);
+    else byArea.set(key, { label: subdivision ?? country, members: [marker] });
   }
-  return pin.name;
+  return [...byArea.values()].map(group => ({
+    ...group,
+    center: centerOf(group.members),
+    zoomLevel: useRegion || !group.members.some(marker => marker.area?.region) ? cityZoom : regionZoom,
+  }));
 }
 
 function makeLabel(name: string) {
@@ -70,37 +106,65 @@ function makeLabel(name: string) {
   return label;
 }
 
-function place(element: HTMLElement, group: Pick<Group, 'x' | 'y'>, size: number) {
+function place(element: HTMLElement, group: Group, label: string, size: number, occupied: Bounds[]) {
+  const halfLabel = Math.min(58, Math.max(14, (label.length * 7.3 + 15) / 2));
+  for (const [dx, dy] of labelOffsets) {
+    const x = group.x + dx;
+    const y = group.y + dy;
+    if ((dx || dy) && (x < 15 || x > size - 15 || y < 15 || y > size - 38)) continue;
+    const labelX = Math.max(halfLabel, Math.min(size - halfLabel, x));
+    const box = {
+      left: Math.min(x - 14, labelX - halfLabel),
+      right: Math.max(x + 14, labelX + halfLabel),
+      top: y - 14,
+      bottom: y + 35,
+    };
+    const overlaps = occupied.some(other =>
+      box.left < other.right && box.right > other.left && box.top < other.bottom && box.bottom > other.top,
+    );
+    if (overlaps) continue;
+    occupied.push(box);
+    element.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+    element.style.setProperty('--label-offset', `${labelX - x}px`);
+    element.style.setProperty('--pin-stem-length', `${Math.hypot(dx, dy)}px`);
+    element.style.setProperty('--pin-stem-angle', `${Math.atan2(-dy, -dx)}rad`);
+    return;
+  }
   element.style.transform = `translate(${group.x}px, ${group.y}px) translate(-50%, -50%)`;
-  const labelOffset = Math.max(58 - group.x, Math.min(0, size - 58 - group.x));
-  element.style.setProperty('--label-offset', `${labelOffset}px`);
+  element.style.setProperty('--label-offset', '0px');
+  element.style.setProperty('--pin-stem-length', '0px');
+}
+
+function makeStem() {
+  const stem = document.createElement('span');
+  stem.className = 'pin-stem';
+  stem.setAttribute('aria-hidden', 'true');
+  return stem;
 }
 
 export function setupPins(
   container: HTMLElement,
   canvas: HTMLCanvasElement,
   canZoom: () => boolean,
-  zoomTo: (coordinates: Coordinates) => void,
+  zoomTo: (coordinates: Coordinates, zoomLevel?: number) => void,
 ) {
   const dialog = document.querySelector<HTMLDialogElement>('#cluster-choices')!;
   const title = dialog.querySelector('h2')!;
   const options = dialog.querySelector('ul')!;
   const clusters = new Map<string, { button: HTMLButtonElement; caption: HTMLSpanElement }>();
   let markers: Marker[] = [];
+  let countryGroups: ReturnType<typeof groupByArea> = [];
+  let regionGroups: ReturnType<typeof groupByArea> = [];
   let highlighted: Coordinates | undefined;
 
   dialog.addEventListener('click', event => {
     if (event.target instanceof Element && event.target.closest('a')) dialog.close();
   });
 
-  function choose(members: Marker[], label: string) {
-    const [latitude, longitude] = members[0].pin.coordinates;
-    const spread = members.some(({ pin }) =>
-      Math.abs(pin.coordinates[0] - latitude) > .001 ||
-      Math.abs(pin.coordinates[1] - longitude) > .001,
-    );
-    if (spread && canZoom()) {
-      zoomTo(centerOf(members));
+  function choose(group: Group, label: string) {
+    const { members, zoomLevel } = group;
+    if (zoomLevel || (canZoom() && members.some(marker => !sameLocation(marker, members[0])))) {
+      zoomTo(centerOf(members), zoomLevel);
       return;
     }
     title.textContent = label;
@@ -118,38 +182,58 @@ export function setupPins(
 
   function render(project: (coordinates: Coordinates) => ScreenPoint, size: number, scale: number) {
     const groups: Group[] = [];
+    const onScreen = (point: ScreenPoint) =>
+      point.front && point.x >= 12 && point.y >= 12 && point.x <= size - 12 && point.y <= size - 12;
+    const useAreaPins = scale < cityZoom;
+    if (useAreaPins) {
+      for (const group of scale < regionZoom ? countryGroups : regionGroups) {
+        let anchor = project(group.center);
+        if (!onScreen(anchor)) {
+          const visible = group.members.map(marker => project(marker.pin.coordinates)).find(onScreen);
+          if (!visible) continue;
+          anchor = visible;
+        }
+        groups.push({ ...group, x: anchor.x, y: anchor.y });
+      }
+    }
+
+    const localGroups: Group[] = [];
     for (const marker of markers) {
+      if (useAreaPins && marker.area) continue;
       const point = project(marker.pin.coordinates);
-      if (!point.front || point.x < 12 || point.y < 12 || point.x > size - 12 || point.y > size - 12) continue;
-      // Avoid grouping distant locations that only look close at the edge of the globe.
-      const group = groups.find(group =>
-        (point.x - group.x) ** 2 + (point.y - group.y) ** 2 < groupDistance ** 2 &&
-        nearby(marker, group.members[0]),
-      );
+      if (!onScreen(point)) continue;
+      const group = localGroups.find(candidate => {
+        const first = candidate.members[0];
+        if (!marker.area || !first.area) return !marker.area && !first.area && sameLocation(marker, first);
+        return marker.area.country === first.area.country && marker.area.region === first.area.region &&
+          (point.x - candidate.x) ** 2 + (point.y - candidate.y) ** 2 < groupDistance ** 2;
+      });
       if (!group) {
-        groups.push({ x: point.x, y: point.y, members: [marker] });
+        localGroups.push({ x: point.x, y: point.y, members: [marker] });
         continue;
       }
       group.members.push(marker);
       group.x += (point.x - group.x) / group.members.length;
       group.y += (point.y - group.y) / group.members.length;
     }
+    groups.push(...localGroups);
 
     const singlePins = new Set<Marker>();
     const visibleClusters = new Set<string>();
+    const occupied: Bounds[] = [];
     for (const group of groups) {
       const [first] = group.members;
       const located = group.members.some(({ pin }) => pin.coordinates === highlighted);
-      if (group.members.length === 1) {
+      if (group.members.length === 1 && !group.zoomLevel) {
         singlePins.add(first);
-        place(first.element, group, size);
+        place(first.element, group, first.pin.name, size, occupied);
         first.element.classList.toggle('located', located);
         continue;
       }
 
-      const key = group.members.map(member => member.id).join(',');
+      const key = `${group.zoomLevel ?? 'local'}:${group.members.map(member => member.id).join(',')}`;
       visibleClusters.add(key);
-      const label = labelFor(group.members, scale);
+      const label = group.label ?? first.area?.region ?? first.area?.country ?? first.pin.name;
       let cluster = clusters.get(key);
       if (!cluster) {
         const button = document.createElement('button');
@@ -160,8 +244,8 @@ export function setupPins(
         count.textContent = String(group.members.length);
         count.setAttribute('aria-hidden', 'true');
         const caption = makeLabel('');
-        button.append(count, caption);
-        button.addEventListener('click', () => choose(group.members, caption.textContent ?? label));
+        button.append(makeStem(), count, caption);
+        button.addEventListener('click', () => choose(group, caption.textContent ?? label));
         cluster = { button, caption };
         clusters.set(key, cluster);
         container.append(button);
@@ -169,10 +253,11 @@ export function setupPins(
       const { button, caption } = cluster;
       if (caption.textContent !== label) {
         caption.textContent = label;
-        button.setAttribute('aria-label', `${label}, ${group.members.length} nearby pins`);
+        const count = group.members.length;
+        button.setAttribute('aria-label', `${label}, ${count} ${count === 1 ? 'pin' : 'pins'}`);
       }
       button.classList.toggle('located', located);
-      place(button, group, size);
+      place(button, group, label, size, occupied);
     }
 
     for (const marker of markers) {
@@ -203,9 +288,11 @@ export function setupPins(
         element.className = 'globe-pin';
         element.href = pin.href;
         element.setAttribute('aria-label', pin.description ?? pin.name);
-        element.append(makeLabel(pin.name));
-        return { id, pin, element, vector: unitVector(pin.coordinates) };
+        element.append(makeStem(), makeLabel(pin.name));
+        return { id, pin, element, area: areaOf(pin.region), vector: unitVector(pin.coordinates) };
       });
+      countryGroups = groupByArea(markers, false);
+      regionGroups = groupByArea(markers, true);
       container.replaceChildren(...markers.map(marker => marker.element));
     },
   };

@@ -42,8 +42,9 @@ export function setupGlobe(
   });
   const roadContext = roads.getContext('2d');
   let routes: Coordinates[][] = [];
-  const pinLayer = setupPins(pins, canvas, () => scale < maximumScale - .01, coordinates => {
-    void moveTo(cameraAt(coordinates, Math.min(maximumScale, scale * 2.8)), 850, true);
+  const pinLayer = setupPins(pins, canvas, () => scale < maximumScale - .01, (coordinates, zoomLevel) => {
+    const targetScale = zoomLevel ? zoomLevel + .1 : Math.min(maximumScale, scale * 2.8);
+    void moveTo(cameraAt(coordinates, targetScale), 850, true);
   });
   let pendingFrame = 0;
   let cancelMotion: (() => void) | undefined;

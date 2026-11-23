@@ -1,9 +1,9 @@
-import '../status';
 import type { Arc } from 'cobe';
 import { cities as sampleCities, journeys as sampleJourneys, coordinateLabel, type City, type Coordinates, type Journey, type SourceLink } from './data';
 import { loadPrivateJournal } from './journal';
 import { reducedMotion, setupGlobe, type GlobeCamera } from './globe';
 import type { mountMap } from './map';
+import type { GlobePin } from './pins';
 
 function byId<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -30,8 +30,7 @@ const atlas = byId('atlas');
 const overview = byId('overview');
 const detail = byId('detail');
 const list = byId('atlas-list');
-const search = byId<HTMLInputElement>('place-search');
-const year = byId<HTMLSelectElement>('year-filter');
+const journeyIndex = byId('journey-index');
 const transport = byId<HTMLSelectElement>('transport');
 const placesButton = byId<HTMLButtonElement>('places-mode');
 const journeysButton = byId<HTMLButtonElement>('journeys-mode');
@@ -47,7 +46,6 @@ if (!globe) {
 let cities = sampleCities;
 let journeys = sampleJourneys;
 let privateJournal: Awaited<ReturnType<typeof loadPrivateJournal>>;
-const availableYears = new Set<number>();
 const journeyMode = { flight: 'Flight', drive: 'Road trip', rail: 'Train', cruise: 'Cruise' };
 
 let mode: 'places' | 'journeys' = 'places';
@@ -82,7 +80,6 @@ function reveal(element: Element, delay = 0, duration = 480) {
 function atlasUrl(values: Record<string, string> = {}) {
   const params = new URLSearchParams();
   if (mode === 'journeys') params.set('view', mode);
-  if (year.value) params.set('year', year.value);
   Object.entries(values).forEach(([key, value]) => {
     if (value) params.set(key, value);
     else params.delete(key);
@@ -99,7 +96,7 @@ function journeyLink(id: string) {
   return atlasUrl({ view: 'journeys', journey: id });
 }
 
-function addListItem(title: string, subtitle: string, href: string, location: Coordinates, children: HTMLElement[] = []) {
+function addListItem(title: string, subtitle: string, href: string, location: Coordinates) {
   const article = node('article', 'index-entry');
   const titleLink = link(href, title, 'index-link');
   article.append(titleLink, node('p', 'index-meta', subtitle));
@@ -114,7 +111,6 @@ function addListItem(title: string, subtitle: string, href: string, location: Co
     });
     article.append(focus);
   }
-  article.append(...children);
   list.append(article);
 }
 
@@ -134,23 +130,20 @@ function sourceLinks(sources: SourceLink[]) {
 function renderJournalExtras() {
   const extras = byId('journal-extras');
   extras.replaceChildren();
-  if (!privateJournal || (mode === 'journeys' && transport.value && transport.value !== 'flight')) return;
-  const isPlaces = mode === 'places';
-  const groups = isPlaces
-    ? [
-      { name: 'Photo collections', records: privateJournal.photoCollections },
-      { name: 'Places to match', records: privateJournal.placeNotes },
-    ]
-    : [{ name: 'Upcoming and incomplete flights', records: privateJournal.flightNotes }];
-  const query = isPlaces ? search.value.trim().toLowerCase() : '';
+  if (!privateJournal) return false;
+  const groups = [
+    { name: 'Photo collections', records: privateJournal.photoCollections },
+    { name: 'Places to match', records: privateJournal.placeNotes },
+  ];
+  if (!transport.value || transport.value === 'flight') {
+    groups.unshift({ name: 'Upcoming and incomplete flights', records: privateJournal.flightNotes });
+  }
   for (const { name, records } of groups) {
-    const matching = records.filter(record => (!year.value || String(record.year) === year.value) &&
-      [record.name, record.note].join(' ').toLowerCase().includes(query));
-    if (!matching.length) continue;
+    if (!records.length) continue;
     const section = node('details', 'journal-extras');
     section.open = !list.childElementCount;
-    section.append(node('summary', '', `${name} (${matching.length})`));
-    for (const record of matching) {
+    section.append(node('summary', '', `${name} (${records.length})`));
+    for (const record of records) {
       const entry = node('article', 'index-entry');
       entry.append(node('h3', '', record.name), node('p', 'index-meta', record.description));
       if (record.note) entry.append(node('p', '', record.note));
@@ -163,64 +156,60 @@ function renderJournalExtras() {
 }
 
 function renderOverview() {
-  placesButton.setAttribute('aria-pressed', String(mode === 'places'));
-  journeysButton.setAttribute('aria-pressed', String(mode === 'journeys'));
-  byId('index-title').textContent = mode === 'places' ? 'Places' : 'Journeys';
-  byId('places-filter').hidden = mode !== 'places';
-  byId('journeys-filter').hidden = mode !== 'journeys';
-  list.replaceChildren();
+  const showingJourneys = mode === 'journeys';
+  placesButton.setAttribute('aria-pressed', String(!showingJourneys));
+  journeysButton.setAttribute('aria-pressed', String(showingJourneys));
+  overview.dataset.view = mode;
+  journeyIndex.hidden = !showingJourneys;
 
-  if (mode === 'places') {
-    const query = search.value.trim().toLocaleLowerCase();
-    const visibleCities = cities.flatMap(city => {
-      const namedCity = `${city.name} ${city.region}`.toLocaleLowerCase().includes(query);
-      const places = city.places.filter(place => place.visits.some(visit =>
-        (!year.value || String(visit.year) === year.value) && (namedCity ||
-          `${place.name} ${visit.activity} ${visit.note}`.toLocaleLowerCase().includes(query)),
-      ));
-      return places.length ? [{ ...city, places }] : [];
-    });
-    globe?.setContent(visibleCities.map(city => ({
-      name: city.name, href: cityLink(city.id), coordinates: city.coordinates,
-    })), [], []);
-    for (const city of visibleCities) {
-      const children = query ? city.places.map(place => link(cityLink(city.id, place.id), place.name, 'index-place')) : [];
-      const count = city.places.length;
-      addListItem(city.name, `${city.region} · ${count} ${count === 1 ? 'place' : 'places'}`, cityLink(city.id), city.coordinates, children);
+  if (!showingJourneys) {
+    const pins = cities.map(city => ({
+      name: city.name, region: city.region, href: cityLink(city.id), coordinates: city.coordinates,
+    }));
+    globe?.setContent(pins, [], []);
+    if (!globe) {
+      byId('places-fallback').replaceChildren(...pins.map(pin => {
+        const row = node('li');
+        row.append(link(pin.href, pin.name));
+        return row;
+      }));
     }
-  } else {
-    const visibleJourneys = journeys.filter(journey =>
-      (!year.value || String(journey.year) === year.value) &&
-      (!transport.value || journey.mode === transport.value),
-    );
-    const arcs: Arc[] = [];
-    const surfacePaths: Coordinates[][] = [];
-    const pins = [];
-    for (const journey of visibleJourneys) {
-      const [first] = journey.stops;
-      const last = journey.stops.at(-1)!;
-      addListItem(journey.name, [journeyMode[journey.mode], journey.date ?? journey.year, journey.evidence].filter(Boolean).join(' · '),
-        journeyLink(journey.id), first.coordinates);
-      pins.push({ name: first.name, href: journeyLink(journey.id), coordinates: first.coordinates });
-      if (first !== last) pins.push({ name: last.name, href: journeyLink(journey.id), coordinates: last.coordinates });
-      if (journey.mode === 'flight') {
-        journey.stops.slice(1).forEach((stop, index) => arcs.push({
-          from: journey.stops[index].coordinates, to: stop.coordinates,
-        }));
-      } else if (journey.stops.length > 1) {
-        surfacePaths.push(journey.stops.map(stop => stop.coordinates));
-      }
-    }
-    globe?.setContent(pins, arcs, surfacePaths);
-    if (arcs.length || surfacePaths.length) {
-      const legend = node('p', 'legend');
-      if (arcs.length) legend.append(node('span', 'legend-flight', 'Flight'));
-      if (surfacePaths.length) legend.append(node('span', 'legend-road', 'Approximate route between stops'));
-      list.append(legend);
+    return;
+  }
+
+  byId('places-fallback').replaceChildren();
+  list.replaceChildren();
+  const visibleJourneys = journeys.filter(journey => !transport.value || journey.mode === transport.value);
+  const arcs: Arc[] = [];
+  const surfacePaths: Coordinates[][] = [];
+  const pins: GlobePin[] = [];
+  for (const journey of visibleJourneys) {
+    const [first] = journey.stops;
+    const last = journey.stops.at(-1)!;
+    const href = journeyLink(journey.id);
+    const date = journey.date ?? journey.year;
+    addListItem(journey.name, [journeyMode[journey.mode], date, journey.evidence].filter(Boolean).join(' · '),
+      href, first.coordinates);
+    const description = `${journey.name} · ${date}`;
+    pins.push({ name: first.name, href, coordinates: first.coordinates, description });
+    if (first !== last) pins.push({ name: last.name, href, coordinates: last.coordinates, description });
+    if (journey.mode === 'flight') {
+      journey.stops.slice(1).forEach((stop, index) => arcs.push({
+        from: journey.stops[index].coordinates, to: stop.coordinates,
+      }));
+    } else if (journey.stops.length > 1) {
+      surfacePaths.push(journey.stops.map(stop => stop.coordinates));
     }
   }
+  globe?.setContent(pins, arcs, surfacePaths);
+  if (arcs.length || surfacePaths.length) {
+    const legend = node('p', 'legend');
+    if (arcs.length) legend.append(node('span', 'legend-flight', 'Flight'));
+    if (surfacePaths.length) legend.append(node('span', 'legend-road', 'Approximate route between stops'));
+    list.append(legend);
+  }
   const hasJournalExtras = renderJournalExtras();
-  if (!list.childElementCount && !hasJournalExtras) list.append(node('p', 'no-results', 'No entries match these filters.'));
+  if (!list.childElementCount && !hasJournalExtras) list.append(node('p', 'no-results', 'No journeys match this travel mode.'));
 }
 
 function detailHeading(label: string, title: string, metadata: string) {
@@ -269,10 +258,7 @@ function showCity(city: City) {
   const mapContainer = node('div', 'detail-map');
   detail.append(mapContainer);
   const entries = node('div', 'field-entries');
-  const visiblePlaces = year.value
-    ? city.places.filter(place => place.visits.some(visit => String(visit.year) === year.value))
-    : city.places;
-  for (const [index, place] of visiblePlaces.entries()) {
+  for (const [index, place] of city.places.entries()) {
     const entry = node('article', 'field-entry');
     entry.id = place.id;
     const heading = node('h2');
@@ -282,7 +268,7 @@ function showCity(city: City) {
     select.addEventListener('click', () => pickPlace(index, false));
     heading.append(select);
     entry.append(heading);
-    for (const visit of place.visits.filter(visit => !year.value || String(visit.year) === year.value)) {
+    for (const visit of place.visits) {
       const note = node('div', 'visit');
       note.append(node('p', 'eyebrow', [visit.date, visit.evidence].filter(Boolean).join(' · ')),
         node('h3', '', visit.activity), node('p', '', visit.note));
@@ -308,18 +294,18 @@ function showCity(city: City) {
     entries.append(entry);
   }
   function pickPlace(index: number, scroll: boolean) {
-    const place = visiblePlaces[index];
+    const place = city.places[index];
     if (!place) return;
     selectedPlace = place.id;
     history.replaceState(null, '', cityLink(city.id, place.id));
     renderedSearch = location.search;
     updatePlaceSelection(true, scroll, true);
   }
-  if (!visiblePlaces.length) {
+  if (!city.places.length) {
     mapContainer.remove();
-    entries.append(node('p', 'no-results', 'No visits are listed for this city in the selected year.'));
+    entries.append(node('p', 'no-results', 'No visits are listed for this city.'));
   } else {
-    void attachMap(mapContainer, visiblePlaces, null, index => pickPlace(index, true));
+    void attachMap(mapContainer, city.places, null, index => pickPlace(index, true));
   }
   detail.append(entries);
 }
@@ -342,7 +328,7 @@ function showJourney(journey: Journey) {
   for (const stop of journey.stops) {
     const entry = node('li');
     entry.append(node('h2', '', stop.name), node('p', 'eyebrow', coordinateLabel(stop.coordinates)));
-    if (stop.cityId) entry.append(link(atlasUrl({ city: stop.cityId, year: '' }), 'Open field journal'));
+    if (stop.cityId) entry.append(link(cityLink(stop.cityId), 'Open field journal'));
     stops.append(entry);
   }
   detail.append(stops);
@@ -358,10 +344,8 @@ function renderRoute(moveFocus = false, animate = false) {
   renderedSearch = location.search;
   const params = new URLSearchParams(renderedSearch);
   mode = params.get('view') === 'journeys' ? 'journeys' : 'places';
-  const selectedYear = params.get('year') ?? '';
-  year.value = availableYears.has(Number(selectedYear)) ? selectedYear : '';
   const { city, journey } = readDestination(params);
-  const nextDetail = city ? `city-${city.id}-${year.value}` : journey ? `journey-${journey.id}` : '';
+  const nextDetail = city ? `city-${city.id}` : journey ? `journey-${journey.id}` : '';
   selectedPlace = params.get('place') ?? '';
   const changed = nextDetail !== currentDetail;
   const animateChange = changed && animate && !reducedMotion.matches;
@@ -377,7 +361,8 @@ function renderRoute(moveFocus = false, animate = false) {
     else if (journey) showJourney(journey);
     if (moveFocus) {
       window.scrollTo({ top: 0, behavior: 'instant' });
-      (nextDetail ? detail.querySelector('h1') : byId('atlas-title'))?.focus({ preventScroll: true });
+      const viewButton = mode === 'journeys' ? journeysButton : placesButton;
+      (nextDetail ? detail.querySelector('h1') : viewButton)?.focus({ preventScroll: true });
     }
   }
   if (nextDetail) {
@@ -409,7 +394,7 @@ function switchMode(value: typeof mode) {
   interruptTransition();
   history.pushState(null, '', atlasUrl({ view: value === 'places' ? '' : value }));
   renderRoute();
-  if (!reducedMotion.matches) reveal(list, 0, 300);
+  if (mode === 'journeys' && !reducedMotion.matches) reveal(journeyIndex, 0, 300);
 }
 
 async function openAtlasLink(anchor: HTMLAnchorElement) {
@@ -443,19 +428,9 @@ async function openAtlasLink(anchor: HTMLAnchorElement) {
 
 placesButton.addEventListener('click', () => switchMode('places'));
 journeysButton.addEventListener('click', () => switchMode('journeys'));
-search.addEventListener('input', () => {
-  interruptTransition();
-  renderOverview();
-});
 transport.addEventListener('change', () => {
   interruptTransition();
   renderOverview();
-  if (!reducedMotion.matches) reveal(list, 0, 300);
-});
-year.addEventListener('change', () => {
-  interruptTransition();
-  history.replaceState(null, '', atlasUrl());
-  renderRoute();
   if (!reducedMotion.matches) reveal(list, 0, 300);
 });
 document.addEventListener('click', event => {
@@ -485,14 +460,6 @@ async function start() {
     if (journeys.some(journey => journey.mode === 'cruise')) transport.add(new Option('Cruises', 'cruise'));
     byId('journal-label').textContent = 'Private journal · Local preview';
   }
-  const years = [
-    ...cities.flatMap(city => city.places.flatMap(place => place.visits.map(visit => visit.year))),
-    ...journeys.map(journey => journey.year),
-    ...(privateJournal?.photoCollections.map(collection => collection.year) ?? []),
-    ...(privateJournal?.flightNotes.map(flight => flight.year) ?? []),
-  ];
-  years.forEach(value => availableYears.add(value));
-  [...availableYears].sort((a, b) => b - a).forEach(value => year.add(new Option(String(value), String(value))));
   renderRoute();
 }
 

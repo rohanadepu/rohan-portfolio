@@ -13,6 +13,6 @@ pnpm dev
 
 The page is at `/`. Field journals use query links such as `/?city=kyoto`. Use `pnpm build` to check TypeScript and produce the static site in `dist/`.
 
-The header schedule uses Mountain Time (`America/Denver`). The atlas loads OpenFreeMap street tiles when you open a city or a road trip. The journal entries remain usable with the map unavailable. The `atlas-redesign` branch is excluded from Vercel’s automatic deployments.
+The atlas loads OpenFreeMap street tiles when you open a city or a road trip. The journal entries remain usable with the map unavailable. The `atlas-redesign` branch is excluded from Vercel’s automatic deployments.
 
 The loopback development server can load an optional `atlas-data.local/journal.json` and its `photos/` directory. This directory is Git-ignored. Production builds use the sample records.

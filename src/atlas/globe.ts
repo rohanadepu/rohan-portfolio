@@ -1,13 +1,10 @@
 import createGlobe, { type Arc, type COBEOptions } from 'cobe';
 import type { Coordinates } from './data';
 
-interface GlobePin {
-  name: string;
-  href: string;
-  coordinates: Coordinates;
-}
+import { setupPins, type GlobePin } from './pins';
 
 const radians = Math.PI / 180;
+const maximumScale = 64;
 const radius = 0.8; // COBE's sphere radius in clip space.
 const initialView = { phi: -Math.PI / 2 - 125 * radians, theta: 25 * radians, scale: 1 };
 export type GlobeCamera = typeof initialView;
@@ -45,7 +42,9 @@ export function setupGlobe(
   });
   const roadContext = roads.getContext('2d');
   let routes: Coordinates[][] = [];
-  let markers: { pin: GlobePin; element: HTMLAnchorElement }[] = [];
+  const pinLayer = setupPins(pins, canvas, () => scale < maximumScale - .01, coordinates => {
+    void moveTo(cameraAt(coordinates, Math.min(maximumScale, scale * 2.8)), 850, true);
+  });
   let pendingFrame = 0;
   let cancelMotion: (() => void) | undefined;
 
@@ -64,11 +63,7 @@ export function setupGlobe(
 
   function paint(overrides: Partial<COBEOptions> = {}) {
     globe.update({ phi, theta, scale, ...overrides });
-    for (const { pin, element } of markers) {
-      const p = position(pin.coordinates);
-      element.hidden = !p.front || p.x < 12 || p.x > size - 12 || p.y < 12 || p.y > size - 12;
-      element.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)`;
-    }
+    pinLayer.render(position, size, scale);
     if (!roadContext) return;
     roadContext.setTransform(dpr, 0, 0, dpr, 0, 0);
     roadContext.clearRect(0, 0, size, size);
@@ -99,7 +94,7 @@ export function setupGlobe(
   }
 
   function zoom(factor: number) {
-    scale = clamp(scale * factor, 0.75, 2.6);
+    scale = clamp(scale * factor, 0.75, maximumScale);
     requestPaint();
   }
 
@@ -146,16 +141,17 @@ export function setupGlobe(
     });
   }
 
+  function cameraAt([latitude, longitude]: Coordinates, zoomLevel: number): GlobeCamera {
+    return { phi: -Math.PI / 2 - longitude * radians, theta: latitude * radians, scale: zoomLevel };
+  }
+
   async function focus(coordinates: Coordinates, open = false) {
-    const [latitude, longitude] = coordinates;
-    pins.querySelector('.located')?.classList.remove('located');
-    const arrived = await moveTo({
-      phi: -Math.PI / 2 - longitude * radians,
-      theta: latitude * radians,
-      scale: open ? Math.max(2.45, scale * 1.12) : Math.max(1.18, scale),
-    }, open ? 1400 : 900, open);
+    pinLayer.highlight();
+    const zoomLevel = open ? Math.min(maximumScale, Math.max(2.45, scale * 1.12)) : Math.max(1.18, scale);
+    const arrived = await moveTo(cameraAt(coordinates, zoomLevel), open ? 1400 : 900, open);
     if (arrived && !open) {
-      markers.find(({ pin }) => pin.coordinates === coordinates)?.element.classList.add('located');
+      pinLayer.highlight(coordinates);
+      paint();
     }
     return arrived;
   }
@@ -199,10 +195,10 @@ export function setupGlobe(
   }, { passive: false });
   canvas.addEventListener('keydown', event => {
     const actions: Record<string, () => void> = {
-      ArrowLeft: () => { phi -= 0.15; },
-      ArrowRight: () => { phi += 0.15; },
-      ArrowUp: () => { theta = clamp(theta - 0.15, -1.5, 1.5); },
-      ArrowDown: () => { theta = clamp(theta + 0.15, -1.5, 1.5); },
+      ArrowLeft: () => { phi -= 0.15 / scale; },
+      ArrowRight: () => { phi += 0.15 / scale; },
+      ArrowUp: () => { theta = clamp(theta - 0.15 / scale, -1.5, 1.5); },
+      ArrowDown: () => { theta = clamp(theta + 0.15 / scale, -1.5, 1.5); },
       '+': () => zoom(1.2), '=': () => zoom(1.2), '-': () => zoom(1 / 1.2),
     };
     if (!Object.hasOwn(actions, event.key)) return;
@@ -212,7 +208,7 @@ export function setupGlobe(
     requestPaint();
   });
   function easeZoom(factor: number) {
-    void moveTo({ ...camera(), scale: clamp(scale * factor, 0.75, 2.6) }, 280);
+    void moveTo({ ...camera(), scale: clamp(scale * factor, 0.75, maximumScale) }, 280);
   }
   controls.zoomIn.addEventListener('click', () => easeZoom(1.2));
   controls.zoomOut.addEventListener('click', () => easeZoom(1 / 1.2));
@@ -240,21 +236,10 @@ export function setupGlobe(
     moveTo,
     focus,
     stop: () => cancelMotion?.(),
-    markerLocation: (anchor: HTMLAnchorElement) => markers.find(({ element }) => element === anchor)?.pin.coordinates,
+    markerLocation: pinLayer.markerLocation,
     setContent(items: GlobePin[], arcs: Arc[], roadPaths: Coordinates[][]) {
       routes = roadPaths;
-      pins.toggleAttribute('data-dense', items.length > 8);
-      markers = items.map(pin => {
-        const element = document.createElement('a');
-        element.className = 'globe-pin';
-        element.href = pin.href;
-        element.setAttribute('aria-label', pin.name);
-        const label = document.createElement('span');
-        label.textContent = pin.name;
-        element.append(label);
-        return { pin, element };
-      });
-      pins.replaceChildren(...markers.map(marker => marker.element));
+      pinLayer.setContent(items);
       paint({ arcs });
     },
   };

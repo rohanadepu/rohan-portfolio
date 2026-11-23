@@ -49,6 +49,7 @@ if (!globe) {
 
 let cities = publicCities;
 let journeys = publicJourneys;
+const localPreviewCities = new WeakSet<City>();
 const journeyMode = { flight: 'Flight', drive: 'Road trip', rail: 'Train', cruise: 'Cruise' };
 
 let mode: 'places' | 'journeys' = 'places';
@@ -208,6 +209,7 @@ function scrollToEntry(entry: Element | undefined, smooth = true) {
 
 function showCity(city: City) {
   detail.append(detailHeading('Field journal', city.name, `${city.region} · ${coordinateLabel(city.coordinates)}`));
+  const photoRoot = import.meta.env.DEV && localPreviewCities.has(city) ? '/__atlas/photos' : '/atlas-images';
   const mapContainer = node('div', 'detail-map');
   detail.append(mapContainer);
   const entries = node('div', 'field-entries');
@@ -224,9 +226,10 @@ function showCity(city: City) {
     for (const visit of place.visits) {
       const note = node('div', 'visit');
       note.append(node('p', 'eyebrow', visit.date), node('h4', '', visit.activity), node('p', '', visit.note));
+      const gallery = node('div', 'journal-photos');
       for (const photo of visit.photos ?? []) {
         if (!/^[\w-]+\.(?:jpe?g|png|webp|avif)$/i.test(photo.file)) continue;
-        const source = `/atlas-images/${photo.file}`;
+        const source = `${photoRoot}/${photo.file}`;
         const figure = node('figure', 'journal-photo');
         const image = node('img');
         image.src = source;
@@ -241,8 +244,9 @@ function showCity(city: City) {
         photoLink.append(image);
         figure.append(photoLink);
         if (photo.caption) figure.append(node('figcaption', 'eyebrow', photo.caption));
-        note.append(figure);
+        gallery.append(figure);
       }
+      if (gallery.childElementCount) note.append(gallery);
       entry.append(note);
     }
     entries.append(entry);
@@ -412,6 +416,7 @@ async function loadPreview() {
     const response = await fetch('/__atlas/journal', { cache: 'no-store' });
     if (!response.ok) return;
     const preview = await response.json() as ReturnType<typeof atlasPreview>;
+    for (const city of preview.cities) localPreviewCities.add(city);
     cities = withLocalPreview(publicCities, preview.cities);
     journeys = withLocalPreview(publicJourneys, preview.journeys);
     byId('journal-label').hidden = false;

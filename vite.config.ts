@@ -1,15 +1,28 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
-import { atlasPreview } from './src/atlas/journal';
+import { atlasPreview, type CuratedPhoto } from './src/atlas/journal';
 
 const journalDirectory = resolve(import.meta.dirname, 'atlas-data.local');
+const photoDirectory = resolve(import.meta.dirname, 'atlas-photos.local');
 const loopback = '127.0.0.1';
+
+function isMissing(error: unknown) {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+async function readPhotoSelection(): Promise<CuratedPhoto[]> {
+  const contents = await readFile(resolve(photoDirectory, 'selection.json'), 'utf8').catch(error => {
+    if (isMissing(error)) return '[]';
+    throw error;
+  });
+  return JSON.parse(contents);
+}
 
 export default defineConfig({
   server: {
     host: loopback,
-    fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/atlas-data.local/**'] },
+    fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/atlas-data.local/**', '**/atlas-photos.local/**'] },
   },
   plugins: [{
     name: 'local-travel-journal',
@@ -18,7 +31,8 @@ export default defineConfig({
       if (server.config.server.host !== loopback) return;
       server.middlewares.use('/__atlas', async (request, response) => {
         const path = request.url?.split('?')[0];
-        if (request.method !== 'GET' || path !== '/journal') {
+        const photo = path?.match(/^\/photos\/([\w-]+\.jpg)$/)?.[1];
+        if (request.method !== 'GET' || (path !== '/journal' && !photo)) {
           response.writeHead(404).end();
           return;
         }
@@ -33,16 +47,21 @@ export default defineConfig({
           return;
         }
         try {
-          const file = await readFile(resolve(journalDirectory, 'journal.json'), 'utf8');
-          const preview = JSON.stringify(atlasPreview(JSON.parse(file)));
+          const selection = await readPhotoSelection();
+          if (photo && !selection.some(item => item.file === photo)) {
+            response.writeHead(404).end();
+            return;
+          }
+          const body = photo
+            ? await readFile(resolve(photoDirectory, photo))
+            : JSON.stringify(atlasPreview(JSON.parse(await readFile(resolve(journalDirectory, 'journal.json'), 'utf8')), selection));
           response.writeHead(200, {
-            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Type': photo ? 'image/jpeg' : 'application/json; charset=utf-8',
             'Cache-Control': 'private, no-store',
             'Cross-Origin-Resource-Policy': 'same-origin',
-          }).end(preview);
+          }).end(body);
         } catch (error) {
-          const missing = error instanceof Error && 'code' in error && error.code === 'ENOENT';
-          response.writeHead(missing ? 404 : 500).end();
+          response.writeHead(isMissing(error) ? 404 : 500).end();
         }
       });
     },

@@ -132,7 +132,14 @@
 .visit { grid-column: 2; }
 .visit h4 { font: 1.85rem var(--serif); margin: .2rem 0; }
 .visit > p:not(.eyebrow) { max-width: 58ch; }
-.journal-photo { margin-top: 1rem; max-width: 36rem; }
+.journal-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  align-items: start;
+  gap: .85rem;
+  max-width: 36rem;
+  margin-top: 1rem;
+}
 .journal-photo img { height: auto; }
 .journal-photo figcaption { margin-top: .55rem; }
 .itinerary { padding-left: 1.5rem; max-width: 48rem; }

@@ -1,4 +1,4 @@
-import type { City, Coordinates, Journey, Stop } from './data';
+import type { AtlasPhoto, City, Coordinates, Journey, Stop } from './data';
 
 interface VisitRecord {
   cityId: string;
@@ -12,6 +12,12 @@ interface VisitRecord {
   endDate: string | null;
   activity: string;
   note: string;
+}
+
+export interface CuratedPhoto extends AtlasPhoto {
+  cityId: string;
+  placeId: string;
+  startDate: string;
 }
 
 interface SurfaceJourney extends Omit<Journey, 'year' | 'date' | 'mode'> {
@@ -50,7 +56,20 @@ function copyStop({ name, coordinates, cityId }: Stop): Stop {
   return { name, coordinates, cityId };
 }
 
-export function atlasPreview(journal: Journal) {
+function visitKey({ cityId, placeId, startDate }: Pick<VisitRecord, 'cityId' | 'placeId' | 'startDate'>) {
+  return JSON.stringify([cityId, placeId, startDate]);
+}
+
+export function atlasPreview(journal: Journal, curatedPhotos: CuratedPhoto[] = []) {
+  const photosByVisit = new Map<string, AtlasPhoto[]>();
+  for (const selected of curatedPhotos) {
+    const key = visitKey(selected);
+    const { file, alt, caption, width, height } = selected;
+    const photo = { file, alt, caption, width, height };
+    const photos = photosByVisit.get(key);
+    if (photos) photos.push(photo);
+    else photosByVisit.set(key, [photo]);
+  }
   const cities = new Map<string, City>();
   for (const record of journal.visits) {
     let city = cities.get(record.cityId);
@@ -68,6 +87,7 @@ export function atlasPreview(journal: Journal) {
       date: formatDateRange(record.startDate, record.endDate),
       activity: record.activity,
       note: record.note,
+      photos: photosByVisit.get(visitKey(record)),
     });
   }
 

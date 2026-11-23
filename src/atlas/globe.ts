@@ -1,10 +1,10 @@
 import createGlobe, { type Arc, type COBEOptions } from 'cobe';
 import type { Coordinates } from './data';
 
-import { setupPins, type GlobePin } from './pins';
+import { pinDiameter, setupPins, type GlobePin } from './pins';
 
 const radians = Math.PI / 180;
-const maximumScale = 64;
+const maximumScale = 256;
 const zoomStep = 1.3;
 const radius = 0.8; // COBE's sphere radius in clip space.
 const initialView = { phi: -Math.PI / 2 - 125 * radians, theta: 25 * radians, scale: 1 };
@@ -26,6 +26,7 @@ const darkGlobe: GlobePalette = {
 export function setupGlobe(
   canvas: HTMLCanvasElement, surfaceCanvas: HTMLCanvasElement, pins: HTMLElement,
   controls: { zoomIn: HTMLButtonElement; zoomOut: HTMLButtonElement; reset: HTMLButtonElement },
+  showGlobe: () => void,
 ) {
   const dpr = Math.min(window.devicePixelRatio, 2);
   const context = { alpha: true, stencil: false, antialias: true, depth: false, preserveDrawingBuffer: false };
@@ -44,9 +45,7 @@ export function setupGlobe(
   const readRouteColor = () => getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
   let routeColor = readRouteColor();
   let surfaceRoutes: Coordinates[][] = [];
-  const pinLayer = setupPins(pins, canvas, (coordinates, zoomLevel) => {
-    void moveTo(cameraAt(coordinates, zoomLevel), 680, true);
-  }, maximumScale);
+  const pinLayer = setupPins(pins, canvas, focusCluster);
   let pendingFrame = 0;
   let cancelMotion: (() => void) | undefined;
   let buttonZoom: { scale: number } | undefined;
@@ -55,15 +54,18 @@ export function setupGlobe(
     return radius * Math.min(width, height) / 2;
   }
 
-  function position([latitude, longitude]: Coordinates) {
+  function position([latitude, longitude]: Coordinates, view = camera()) {
     const lat = latitude * radians;
-    const angle = longitude * radians + phi;
+    const angle = longitude * radians + view.phi;
+    const cosTheta = Math.cos(view.theta);
+    const sinTheta = Math.sin(view.theta);
     const x = Math.cos(lat) * Math.cos(angle);
-    const y = Math.cos(theta) * Math.sin(lat) + Math.sin(theta) * Math.cos(lat) * Math.sin(angle);
-    const z = Math.sin(theta) * Math.sin(lat) - Math.cos(theta) * Math.cos(lat) * Math.sin(angle);
+    const y = cosTheta * Math.sin(lat) + sinTheta * Math.cos(lat) * Math.sin(angle);
+    const z = sinTheta * Math.sin(lat) - cosTheta * Math.cos(lat) * Math.sin(angle);
+    const screenScale = screenRadius() * view.scale;
     return {
-      x: width / 2 + x * screenRadius() * scale,
-      y: height / 2 - y * screenRadius() * scale,
+      x: width / 2 + x * screenScale,
+      y: height / 2 - y * screenScale,
       front: z > 0,
     };
   }
@@ -144,11 +146,11 @@ export function setupGlobe(
       };
       function step(now: number) {
         const progress = clamp((now - started) / duration, 0, 1);
-        const rotationProgress = ease(approach ? Math.min(progress / 0.8, 1) : progress);
-        const zoomProgress = ease(approach ? Math.max(0, (progress - 0.22) / 0.78) : progress);
+        const rotationProgress = ease(approach ? Math.min(progress / 0.7, 1) : progress);
+        const zoomProgress = ease(approach ? Math.max(0, (progress - 0.3) / 0.7) : progress);
         phi = start.phi + rotation * rotationProgress;
         theta = start.theta + tilt * rotationProgress;
-        scale = start.scale + zoomDistance * zoomProgress;
+        scale = start.scale * (target.scale / start.scale) ** zoomProgress;
         paint();
         if (progress < 1) {
           frame = requestAnimationFrame(step);
@@ -163,6 +165,29 @@ export function setupGlobe(
 
   function cameraAt([latitude, longitude]: Coordinates, zoomLevel: number): GlobeCamera {
     return { phi: -Math.PI / 2 - longitude * radians, theta: latitude * radians, scale: zoomLevel };
+  }
+
+  function focusCluster(center: Coordinates, members: Coordinates[], neighbors: Coordinates[]) {
+    const target = cameraAt(center, 1);
+    const points = members.map(location => position(location, target));
+    if (points.some(point => !point.front)) return false;
+    const peers = [...points, ...neighbors.map(location => position(location, target)).filter(point => point.front)];
+    let nearest = Infinity;
+    let fit = maximumScale;
+    for (const point of points) {
+      for (const peer of peers) {
+        if (peer !== point) nearest = Math.min(nearest, Math.hypot(point.x - peer.x, point.y - peer.y));
+      }
+      // Leave room for both the pin and its label at the edges of the view.
+      fit = Math.min(fit,
+        (width / 2 - 32) / Math.abs(point.x - width / 2),
+        (height / 2 - 40) / Math.abs(point.y - height / 2));
+    }
+    if (fit < 0.75 || nearest * fit <= pinDiameter) return false;
+    target.scale = Math.min(fit, Math.max(scale * zoomStep, pinDiameter * 1.75 / nearest, 0.75));
+    showGlobe();
+    void moveTo(target, 980, true);
+    return true;
   }
 
   function focus(coordinates: Coordinates) {

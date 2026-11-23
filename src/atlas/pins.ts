@@ -42,7 +42,7 @@ interface Bounds {
 }
 
 const subdivisionZoom = 1.22;
-const pinDiameter = 24;
+export const pinDiameter = 24;
 function areaOf(region?: string): Marker['area'] {
   const parts = region?.split(',').map(part => part.trim()).filter(Boolean);
   const country = parts?.pop();
@@ -116,15 +116,13 @@ function place(element: HTMLElement, { x, y }: Group, label: string, width: numb
 export function setupPins(
   container: HTMLElement,
   canvas: HTMLCanvasElement,
-  zoomTo: (coordinates: Coordinates, zoomLevel: number) => void,
-  maximumScale: number,
+  focusCluster: (center: Coordinates, members: Coordinates[], neighbors: Coordinates[]) => boolean,
 ) {
   const dialog = document.querySelector<HTMLDialogElement>('#cluster-choices')!;
   const title = dialog.querySelector('h2')!;
   const options = dialog.querySelector('ul')!;
   const clusters = new Map<string, { button: HTMLButtonElement; caption: HTMLSpanElement }>();
   let markers: Marker[] = [];
-  let currentScale = 1;
 
   dialog.addEventListener('click', event => {
     if (event.target instanceof Element && event.target.closest('a')) dialog.close();
@@ -132,10 +130,10 @@ export function setupPins(
 
   function choose(group: Group, label: string) {
     const { members } = group;
-    if (members[0].area && currentScale < maximumScale &&
-        members.some(member => !sameLocation(member, members[0]))) {
-      zoomTo(centerOf(members), Math.min(currentScale * 1.7, maximumScale));
-      return;
+    if (members[0].area) {
+      const locations = members.map(member => member.pin.coordinates);
+      const neighbors = markers.filter(marker => !members.includes(marker)).map(marker => marker.pin.coordinates);
+      if (focusCluster(centerOf(members), locations, neighbors)) return;
     }
     title.textContent = label;
     const targets = new Map(members.map(({ pin }) => [pin.href, pin]));
@@ -151,7 +149,6 @@ export function setupPins(
   }
 
   function render(project: (coordinates: Coordinates) => ScreenPoint, width: number, height: number, scale: number, horizon: number) {
-    currentScale = scale;
     container.style.setProperty('--pin-horizon', `${horizon}px`);
     const onScreen = (point: ScreenPoint) =>
       point.front && point.x >= 12 && point.y >= 12 && point.x <= width - 12 && point.y <= height - 12;

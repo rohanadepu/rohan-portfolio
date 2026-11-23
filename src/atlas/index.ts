@@ -41,7 +41,7 @@ const globeView = byId('globe-view');
 const globeCanvas = byId<HTMLCanvasElement>('globe');
 const globe = setupGlobe(globeCanvas, byId('surface-routes'), byId('globe-pins'), {
   zoomIn: byId('zoom-in'), zoomOut: byId('zoom-out'), reset: byId('reset'),
-});
+}, showGlobe);
 if (!globe) {
   globeView.hidden = true;
   byId('globe-fallback').hidden = false;

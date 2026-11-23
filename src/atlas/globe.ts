@@ -186,7 +186,7 @@ export function setupGlobe(
     if (fit < 0.75 || nearest * fit <= pinDiameter) return false;
     target.scale = Math.min(fit, Math.max(scale * 1.18, pinDiameter * 1.5 / nearest, 0.75));
     showGlobe();
-    void moveTo(target, 1350, true);
+    void moveTo(target, 2800, true);
     return true;
   }
 

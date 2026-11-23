@@ -1,6 +1,6 @@
 # Rohan Adepu · Portfolio and Travel Atlas
 
-The site opens with a COBE travel atlas and MapLibre field journals, followed by a short profile and selected projects. The example visits and journeys are illustrative. The Kyoto image is generated for the preview.
+The portfolio opens with an introduction, then a COBE travel atlas, a short profile, and selected projects. Cities and journeys open their own MapLibre journal views.
 
 ## Run locally
 
@@ -11,8 +11,12 @@ pnpm install
 pnpm dev
 ```
 
-The page is at `/`. Field journals use query links such as `/?city=kyoto`. Use `pnpm build` to check TypeScript and produce the static site in `dist/`.
+The page is at `/`. Field journals use query links with a city ID, such as `/?city=your-city-id`. Use `pnpm build` to check TypeScript and produce the static site in `dist/`, and `pnpm preview` to view the public build locally.
 
 The atlas loads OpenFreeMap street tiles when you open a city or a road trip. The journal entries remain usable with the map unavailable. The `atlas-redesign` branch is excluded from Vercel’s automatic deployments.
 
-The loopback development server can load an optional `atlas-data.local/journal.json` and its `photos/` directory. This directory is Git-ignored. Production builds use the sample records.
+## Publish atlas entries
+
+Add the cities, visits, and journeys you want to share to `src/atlas/public-data.ts`. To attach photos to a visit, copy the individual images you have selected into `public/atlas-images/` and list them in that visit’s `photos` array. Each photo uses a filename such as `city-overlook.jpg` and descriptive `alt` text. You can also include a caption and the image dimensions. Files in `public/` are served directly.
+
+The Git-ignored `atlas-data.local/journal.json` can supplement the loopback development preview with private text entries. Imported photos, source links, albums, and raw journal records are excluded from the preview response. Production builds load only the entries in `src/atlas/public-data.ts`.

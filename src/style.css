@@ -135,7 +135,6 @@ footer { border-top: 1px solid var(--line); justify-content: space-between; padd
   }
   .atlas-page, .portfolio-section { box-shadow: 0 -1px var(--line); }
   .atlas-page { z-index: 1; }
-  .atlas-page:has(#detail:not([hidden])) { position: relative; top: auto; }
   .about-slide { z-index: 2; }
   .projects-slide { z-index: 3; }
   .interests-slide { z-index: 4; }

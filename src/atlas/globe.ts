@@ -45,8 +45,8 @@ export function setupGlobe(
   let routeColor = readRouteColor();
   let surfaceRoutes: Coordinates[][] = [];
   const pinLayer = setupPins(pins, canvas, (coordinates, zoomLevel) => {
-    void moveTo(cameraAt(coordinates, zoomLevel + .04), 680, true);
-  });
+    void moveTo(cameraAt(coordinates, zoomLevel), 680, true);
+  }, maximumScale);
   let pendingFrame = 0;
   let cancelMotion: (() => void) | undefined;
   let buttonZoom: { scale: number } | undefined;

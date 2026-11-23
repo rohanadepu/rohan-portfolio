@@ -1,6 +1,7 @@
-.detail-heading h2 {
-  font: clamp(5rem, 11vw, 10.5rem)/.81 var(--serif);
+.detail-heading h1 {
+  font: clamp(3rem, 10vw, 9rem)/.9 var(--serif);
   letter-spacing: -.045em;
+  overflow-wrap: anywhere;
 }
 .atlas-toolbar {
   display: flex;
@@ -89,9 +90,12 @@
 .globe-actions button:hover { background: var(--tint); }
 .globe-help { text-align: center; margin-top: .35rem; }
 .sample-label { font-size: .72rem; text-align: center; margin-bottom: 1rem; }
+#atlas-empty { text-align: center; }
+#detail { min-height: 100svh; padding-bottom: 2.25rem; }
 .detail-heading { padding: 1.25rem 0 1.65rem; }
-.back-link { display: inline-block; margin-bottom: clamp(1.5rem, 4vw, 3rem); font-size: .91rem; }
-.detail-heading h2 { margin: .2em 0 .12em; }
+.back-link { display: inline-flex; align-items: center; min-height: 2.75rem; font-size: .91rem; }
+.detail-heading .back-link { margin-bottom: clamp(1.5rem, 4vw, 3rem); }
+.detail-heading h1 { margin: .2em 0 .12em; }
 .detail-meta { color: var(--quiet); font: .88rem/1.6 var(--mono); }
 .detail-map { position: relative; height: clamp(18rem, 40vw, 30rem); background: var(--tint); border: 1px solid var(--line); }
 .detail-map .maplibregl-canvas { filter: saturate(.13); }
@@ -136,15 +140,6 @@
 .itinerary h3 { font: 2.35rem var(--serif); }
 .itinerary a { display: inline-block; margin-top: .5rem; }
 .no-results, .unavailable { color: var(--quiet); padding: 1.15rem; }
-.journal-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .35rem 1rem;
-  list-style: none;
-  margin: .75rem 0;
-  padding: 0;
-}
-.journal-sources a { text-underline-offset: .2em; }
 @media (prefers-reduced-motion: no-preference) {
   .view-switch button, .globe-actions button, .field-entry, .pin-label {
     transition: background-color 180ms ease, color 180ms ease;

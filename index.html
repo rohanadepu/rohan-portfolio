@@ -19,7 +19,7 @@
     <button class="theme-toggle" type="button" aria-label="Dark mode" aria-pressed="false" title="Toggle dark mode" hidden>
       <span class="theme-moon" aria-hidden="true">☾</span><span class="theme-sun" aria-hidden="true">☀︎</span>
     </button>
-    <main>
+    <main id="portfolio">
       <section class="personal-intro page-slide" aria-labelledby="personal-title">
         <div class="intro-copy">
           <p class="eyebrow intro-role">Software engineer</p>
@@ -72,9 +72,9 @@
               </div>
             </section>
           </div>
-          <p id="journal-label" class="eyebrow sample-label">Sample travel entries</p>
+          <p id="atlas-empty" class="unavailable" hidden></p>
+          <p id="journal-label" class="eyebrow sample-label" hidden>Local journal preview</p>
         </div>
-        <div id="detail" hidden></div>
         <nav class="navigation" aria-label="Site sections">
           <a href="#atlas">Atlas</a>
           <a href="#about">About</a>
@@ -122,7 +122,8 @@
         <p>Outside work, I lift, get outdoors, and work on cars.</p>
       </section>
     </main>
-    <footer><span>Rohan Adepu</span><a href="#top">Back to top</a></footer>
+    <footer id="portfolio-footer"><span>Rohan Adepu</span><a href="#top">Back to top</a></footer>
+    <main id="detail" hidden aria-labelledby="detail-title"></main>
   </div>
   <script type="module" src="/src/atlas/index.ts"></script>
 </body>

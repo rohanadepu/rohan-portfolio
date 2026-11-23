@@ -1,6 +1,7 @@
 import type { Arc } from 'cobe';
-import { cities as sampleCities, journeys as sampleJourneys, coordinateLabel, type City, type Coordinates, type Journey, type SourceLink } from './data';
-import { loadPrivateJournal } from './journal';
+import { coordinateLabel, type City, type Coordinates, type Journey } from './data';
+import { publicCities, publicJourneys } from './public-data';
+import type { atlasPreview } from './journal';
 import { reducedMotion, setupGlobe, type GlobeCamera } from './globe';
 import type { mountMap } from './map';
 import type { GlobePin } from './pins';
@@ -30,7 +31,10 @@ if (legacyAtlasPath) {
 const atlasAnchor = byId('atlas');
 const atlas = byId('atlas-panel');
 const overview = byId('overview');
+const portfolio = byId('portfolio');
+const portfolioFooter = byId('portfolio-footer');
 const detail = byId('detail');
+const emptyAtlas = byId('atlas-empty');
 const placesButton = byId<HTMLButtonElement>('places-mode');
 const journeysButton = byId<HTMLButtonElement>('journeys-mode');
 const globeView = byId('globe-view');
@@ -43,9 +47,8 @@ if (!globe) {
   byId('globe-fallback').hidden = false;
 }
 
-let cities = sampleCities;
-let journeys = sampleJourneys;
-let privateJournal: Awaited<ReturnType<typeof loadPrivateJournal>>;
+let cities = publicCities;
+let journeys = publicJourneys;
 const journeyMode = { flight: 'Flight', drive: 'Road trip', rail: 'Train', cruise: 'Cruise' };
 
 let mode: 'places' | 'journeys' = 'places';
@@ -112,19 +115,6 @@ function journeyLink(id: string) {
   return atlasUrl({ view: 'journeys', journey: id });
 }
 
-function sourceLinks(sources: SourceLink[]) {
-  const group = node('ul', 'journal-sources');
-  for (const source of sources) {
-    const item = node('li');
-    const anchor = link(source.url, source.label);
-    anchor.target = '_blank';
-    anchor.rel = 'noopener noreferrer';
-    item.append(anchor);
-    group.append(item);
-  }
-  return group;
-}
-
 function renderOverview() {
   const showingJourneys = mode === 'journeys';
   placesButton.setAttribute('aria-pressed', String(!showingJourneys));
@@ -145,6 +135,9 @@ function renderOverview() {
     : cities.map(city => ({
       name: city.name, region: city.region, href: cityLink(city.id), coordinates: city.coordinates,
     }));
+
+  emptyAtlas.hidden = pins.length > 0;
+  emptyAtlas.textContent = showingJourneys ? 'No journeys published yet.' : 'No places published yet.';
 
   if (globe) {
     const flightArcs: Arc[] = [];
@@ -173,7 +166,8 @@ function renderOverview() {
 
 function detailHeading(label: string, title: string, metadata: string) {
   const group = node('header', 'detail-heading');
-  const heading = node('h2', '', title);
+  const heading = node('h1', '', title);
+  heading.id = 'detail-title';
   heading.tabIndex = -1;
   group.append(
     link(atlasUrl(), 'Back to the atlas', 'back-link'),
@@ -213,7 +207,7 @@ function scrollToEntry(entry: Element | undefined, smooth = true) {
 }
 
 function showCity(city: City) {
-  detail.append(detailHeading(privateJournal ? 'Field journal' : 'Field journal · Sample entry', city.name, `${city.region} · ${coordinateLabel(city.coordinates)}`));
+  detail.append(detailHeading('Field journal', city.name, `${city.region} · ${coordinateLabel(city.coordinates)}`));
   const mapContainer = node('div', 'detail-map');
   detail.append(mapContainer);
   const entries = node('div', 'field-entries');
@@ -229,23 +223,24 @@ function showCity(city: City) {
     entry.append(heading);
     for (const visit of place.visits) {
       const note = node('div', 'visit');
-      note.append(node('p', 'eyebrow', [visit.date, visit.evidence].filter(Boolean).join(' · ')),
-        node('h4', '', visit.activity), node('p', '', visit.note));
-      if (visit.sources?.length) note.append(sourceLinks(visit.sources));
-      if (visit.photo) {
+      note.append(node('p', 'eyebrow', visit.date), node('h4', '', visit.activity), node('p', '', visit.note));
+      for (const photo of visit.photos ?? []) {
+        if (!/^[\w-]+\.(?:jpe?g|png|webp|avif)$/i.test(photo.file)) continue;
+        const source = `/atlas-images/${photo.file}`;
         const figure = node('figure', 'journal-photo');
         const image = node('img');
-        image.src = visit.photo.src;
-        image.alt = visit.photo.alt;
-        image.width = visit.photo.width ?? 1050;
-        image.height = visit.photo.height ?? 700;
+        image.src = source;
+        image.alt = photo.alt;
+        if (photo.width) image.width = photo.width;
+        if (photo.height) image.height = photo.height;
         image.loading = 'lazy';
-        const photoLink = link(visit.photo.src, '');
-        photoLink.setAttribute('aria-label', `View larger image of ${place.name}`);
+        const photoLink = link(source, '');
+        photoLink.setAttribute('aria-label', `View larger photo: ${photo.alt}`);
         photoLink.target = '_blank';
         photoLink.rel = 'noopener';
         photoLink.append(image);
-        figure.append(photoLink, node('figcaption', 'eyebrow', visit.photo.caption));
+        figure.append(photoLink);
+        if (photo.caption) figure.append(node('figcaption', 'eyebrow', photo.caption));
         note.append(figure);
       }
       entry.append(note);
@@ -270,10 +265,8 @@ function showCity(city: City) {
 }
 
 function showJourney(journey: Journey) {
-  detail.append(detailHeading(privateJournal ? 'Itinerary' : 'Itinerary · Sample journey', journey.name,
-    [journeyMode[journey.mode], journey.date ?? journey.year, journey.evidence].filter(Boolean).join(' · ')));
+  detail.append(detailHeading('Itinerary', journey.name, `${journeyMode[journey.mode]} · ${journey.date ?? journey.year}`));
   if (journey.note) detail.append(node('p', '', journey.note));
-  if (journey.sources?.length) detail.append(sourceLinks(journey.sources));
   const container = node('div', 'detail-map');
   detail.append(container);
   if (journey.stops.length > 1) {
@@ -314,14 +307,19 @@ function renderRoute(moveFocus = false, animate = false) {
     map?.hide();
     map = undefined;
     detail.replaceChildren();
-    overview.hidden = Boolean(nextDetail);
+    portfolio.hidden = Boolean(nextDetail);
+    portfolioFooter.hidden = Boolean(nextDetail);
     detail.hidden = !nextDetail;
     if (city) showCity(city);
     else if (journey) showJourney(journey);
+    if (nextDetail) detail.append(link(atlasUrl(), 'Back to the atlas', 'back-link'));
+    const title = city?.name ?? journey?.name;
+    document.title = title ? `${title} · Rohan Adepu` : 'Rohan Adepu';
     if (moveFocus) {
-      atlasAnchor.scrollIntoView({ block: 'start', behavior: 'instant' });
+      if (nextDetail) window.scrollTo({ top: 0, behavior: 'instant' });
+      else atlasAnchor.scrollIntoView({ block: 'start', behavior: 'instant' });
       const viewButton = mode === 'journeys' ? journeysButton : placesButton;
-      (nextDetail ? detail.querySelector('h2') : viewButton)?.focus({ preventScroll: true });
+      (nextDetail ? byId('detail-title') : viewButton).focus({ preventScroll: true });
     }
   }
   if (nextDetail) {
@@ -360,7 +358,7 @@ async function openAtlasLink(anchor: HTMLAnchorElement) {
   interruptTransition();
   const { city, journey } = readDestination(new URL(anchor.href).searchParams);
   const target = city?.coordinates ?? globe?.markerLocation(anchor) ?? journey?.stops[0]?.coordinates;
-  const fromOverview = !overview.hidden;
+  const fromOverview = !portfolio.hidden;
   const before = fromOverview ? globe?.camera() : undefined;
   if (globe && fromOverview && target) {
     if (city || journey) void import('./map').catch(() => {});
@@ -395,22 +393,35 @@ document.addEventListener('click', event => {
     interruptTransition();
     return;
   }
-  if (!atlas.contains(anchor)) return;
+  if (!atlas.contains(anchor) && !detail.contains(anchor)) return;
   event.preventDefault();
   void openAtlasLink(anchor);
 });
 window.addEventListener('popstate', () => {
   interruptTransition();
-  if (location.search !== renderedSearch) renderRoute(!location.hash, true);
+  if (location.search !== renderedSearch) renderRoute(!location.hash || location.hash === '#atlas', true);
 });
 
-async function start() {
-  if (import.meta.env.DEV) privateJournal = await loadPrivateJournal();
-  if (privateJournal) {
-    cities = privateJournal.cities;
-    journeys = privateJournal.journeys;
-    byId('journal-label').textContent = 'Private journal · Local preview';
+function withLocalPreview<T extends { id: string }>(published: T[], local: T[]) {
+  const publishedIds = new Set(published.map(entry => entry.id));
+  return [...local.filter(entry => !publishedIds.has(entry.id)), ...published];
+}
+
+async function loadPreview() {
+  try {
+    const response = await fetch('/__atlas/journal', { cache: 'no-store' });
+    if (!response.ok) return;
+    const preview = await response.json() as ReturnType<typeof atlasPreview>;
+    cities = withLocalPreview(publicCities, preview.cities);
+    journeys = withLocalPreview(publicJourneys, preview.journeys);
+    byId('journal-label').hidden = false;
+  } catch (error) {
+    console.warn('Could not load local travel journal', error);
   }
+}
+
+async function start() {
+  if (import.meta.env.DEV) await loadPreview();
   const params = new URLSearchParams(location.search);
   const opensAtlas = !location.hash &&
     (legacyAtlasPath || params.has('city') || params.has('journey') || params.get('view') === 'journeys');

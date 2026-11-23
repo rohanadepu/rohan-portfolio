@@ -15,36 +15,19 @@
 .globe-panel { min-width: 0; padding: 0 0 1rem; }
 .globe-view { position: relative; }
 .globe-stage { height: max(17rem, min(100vw, calc(100svh - 8rem))); position: relative; overflow: hidden; }
-#overview:not([data-view="journeys"]) .globe-stage { width: 100vw; margin-inline: calc(50% - 50vw); }
-.globe-view:fullscreen, .globe-view.is-expanded { background: var(--paper); }
-.globe-view.is-expanded { position: fixed; inset: 0; z-index: 4; }
-body.globe-expanded { overflow: hidden; }
-#overview .globe-view:is(:fullscreen, .is-expanded) .globe-stage { width: 100%; height: 100%; margin: 0; }
-.globe-view:is(:fullscreen, .is-expanded) #globe { touch-action: none; }
-.globe-view:is(:fullscreen, .is-expanded) .globe-help {
-  position: absolute;
-  right: 0;
-  bottom: 1rem;
-  left: 0;
-  width: fit-content;
-  margin-inline: auto;
-  padding: .25rem .5rem;
-  background: var(--paper);
-  pointer-events: none;
-}
-.globe-view:is(:fullscreen, .is-expanded) .globe-actions { left: 1rem; z-index: 1; }
+.globe-stage { width: 100vw; margin-inline: calc(50% - 50vw); }
 .globe-stage canvas, #globe-pins { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
 #globe { touch-action: none; cursor: grab; }
 #globe.dragging { cursor: grabbing; }
 #globe:focus-visible { outline-offset: -3px; }
-#roads, #globe-pins { pointer-events: none; }
+#globe-pins { pointer-events: none; clip-path: circle(var(--pin-horizon, 0px)); }
 .globe-pin {
   position: absolute;
   left: 0;
   top: 0;
   pointer-events: auto;
-  height: 1.75rem;
-  width: 1.75rem;
+  height: 1.5rem;
+  width: 1.5rem;
   display: grid;
   place-items: center;
 }
@@ -54,7 +37,7 @@ body.globe-expanded { overflow: hidden; }
   position: absolute;
   top: 100%;
   left: 50%;
-  transform: translateX(calc(-50% + var(--label-offset, 0px)));
+  transform: translateX(-50%);
   max-width: 7.25rem;
   padding: .2rem .45rem;
   background: var(--paper);
@@ -63,35 +46,25 @@ body.globe-expanded { overflow: hidden; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pin-stem {
-  position: absolute;
-  z-index: -1;
-  top: 50%;
-  left: 50%;
-  width: var(--pin-stem-length, 0px);
-  height: 1px;
-  transform-origin: left center;
-  transform: rotate(var(--pin-stem-angle, 0rad));
-  background: var(--ink);
-  opacity: .48;
-  pointer-events: none;
-}
-.globe-pin:hover .pin-label, .globe-pin:focus-visible .pin-label { background: var(--ink); color: var(--paper); }
+.globe-pin.label-above .pin-label { top: auto; bottom: 100%; }
+.globe-pin.label-on-demand .pin-label { visibility: hidden; }
+.globe-pin:hover, .globe-pin:focus-visible { z-index: 1; }
+.globe-pin:hover .pin-label, .globe-pin:focus-visible .pin-label { visibility: visible; background: var(--ink); color: var(--paper); }
+#overview[data-view="journeys"] .globe-pin .pin-label { display: none; }
 .globe-cluster { padding: 0; border: 0; background: transparent; }
 .globe-cluster::before, .globe-cluster::after { content: none; }
 .pin-count {
   display: grid;
   place-items: center;
-  width: 1.65rem;
-  height: 1.65rem;
+  width: 1.35rem;
+  height: 1.35rem;
   background: var(--ink);
   color: var(--paper);
   border: 2px solid var(--paper);
   border-radius: 50%;
   box-shadow: 0 0 0 1px var(--ink);
-  font: 500 .8rem var(--mono);
+  font: 500 .7rem var(--mono);
 }
-.globe-cluster.located .pin-count { outline: 1px solid var(--ink); outline-offset: 3px; }
 .cluster-choices {
   width: min(26rem, calc(100% - 2rem));
   max-height: min(32rem, calc(100% - 2rem));
@@ -114,20 +87,7 @@ body.globe-expanded { overflow: hidden; }
 .globe-actions button { min-width: 2.2rem; min-height: 2.2rem; padding: .2rem .45rem; border: 1px solid var(--line); background: var(--paper); }
 .globe-actions button:hover { background: var(--tint); }
 .globe-help { text-align: center; margin-top: .35rem; }
-.atlas-index { border-top: 1px solid var(--line); padding: 1rem 0; }
 .sample-label { font-size: .72rem; text-align: center; margin-bottom: 1rem; }
-.atlas-index select { width: 100%; background: var(--paper); border: 1px solid var(--line); border-radius: 0; padding: .48rem .6rem; }
-.atlas-results { max-height: 23rem; overflow-y: auto; margin-top: 1.05rem; padding: .25rem .3rem .25rem .25rem; }
-.index-entry { border-top: 1px solid var(--line); padding: .85rem 0; position: relative; padding-right: 4rem; }
-.index-entry:last-of-type { border-bottom: 1px solid var(--line); }
-.index-link { display: inline-block; font: 1.85rem/1 var(--serif); text-decoration: none; }
-.index-link:hover, .index-link:focus-visible { text-decoration: underline; text-underline-offset: .15em; }
-.index-meta { font-size: .875rem; color: var(--quiet); margin-top: .3rem; }
-.locate { position: absolute; right: 0; top: 1rem; padding: .25rem .5rem; background: transparent; border: 1px solid var(--line); font-size: .75rem; }
-.locate:hover { background: var(--tint); }
-.legend { display: flex; gap: .9rem; flex-wrap: wrap; margin-top: .9rem; font-size: .82rem; color: var(--quiet); }
-.legend span::before { content: ""; display: inline-block; width: 1.2rem; border-top: 2px solid var(--ink); vertical-align: middle; margin-right: .4rem; }
-.legend .legend-road::before { border-top-style: dashed; }
 .detail-heading { padding: 1.25rem 0 1.65rem; }
 .back-link { display: inline-block; margin-bottom: clamp(1.5rem, 4vw, 3rem); font-size: .91rem; }
 .detail-heading h2 { margin: .2em 0 .12em; }
@@ -184,31 +144,14 @@ body.globe-expanded { overflow: hidden; }
   padding: 0;
 }
 .journal-sources a { text-underline-offset: .2em; }
-.journal-extras { margin: 1rem 0; }
-.journal-extras summary { border-top: 1px solid var(--line); cursor: pointer; padding: .85rem 0; }
-.journal-extras .index-entry { padding-right: 0; }
-.journal-extras h3 { font-size: 1rem; margin: 0 0 .35rem; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.globe-pin.located::before { outline: 1px solid var(--ink); outline-offset: 3px; }
 @media (prefers-reduced-motion: no-preference) {
-  .view-switch button, .globe-actions button, .locate, .field-entry, .pin-label {
+  .view-switch button, .globe-actions button, .field-entry, .pin-label {
     transition: background-color 180ms ease, color 180ms ease;
   }
   .globe-pin:not([hidden]) { animation: show-pin 170ms ease-out; }
   @keyframes show-pin { from { opacity: 0; } }
-  .globe-pin.located::before, .globe-cluster.located .pin-count { animation: locate-pin 850ms ease-out; }
-  @keyframes locate-pin {
-    from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ink) 48%, transparent); }
-    to { box-shadow: 0 0 0 14px transparent; }
-  }
-}
-@media (min-width: 771px) {
-  #overview[data-view="journeys"] .atlas-layout { grid-template-columns: minmax(0, 2.1fr) minmax(17rem, 1fr); }
-  #overview[data-view="journeys"] .globe-panel { padding-right: clamp(.8rem, 3vw, 2.5rem); }
-  .atlas-index { border-top: 0; border-left: 1px solid var(--line); padding: 1rem 0 1rem clamp(1rem, 3.5vw, 2.65rem); }
 }
 @media (max-width: 770px) {
-  .atlas-results { max-height: 18rem; }
   .field-entry { grid-template-columns: 1fr; }
   .visit { grid-column: auto; }
 }

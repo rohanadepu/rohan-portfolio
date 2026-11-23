@@ -1,5 +1,4 @@
-import type { Arc } from 'cobe';
-import { cities as sampleCities, journeys as sampleJourneys, coordinateLabel, type City, type Coordinates, type Journey, type SourceLink } from './data';
+import { cities as sampleCities, journeys as sampleJourneys, coordinateLabel, type City, type Journey, type SourceLink } from './data';
 import { loadPrivateJournal } from './journal';
 import { reducedMotion, setupGlobe, type GlobeCamera } from './globe';
 import type { mountMap } from './map';
@@ -27,18 +26,15 @@ if (legacyAtlasPath) {
   history.replaceState(null, '', `/${location.search}${location.hash}`);
 }
 
-const atlas = byId('atlas');
+const atlasAnchor = byId('atlas');
+const atlas = byId('atlas-panel');
 const overview = byId('overview');
 const detail = byId('detail');
-const list = byId('atlas-list');
-const journeyIndex = byId('journey-index');
-const transport = byId<HTMLSelectElement>('transport');
 const placesButton = byId<HTMLButtonElement>('places-mode');
 const journeysButton = byId<HTMLButtonElement>('journeys-mode');
 const globeView = byId('globe-view');
-const fullscreen = byId<HTMLButtonElement>('fullscreen');
 const globeCanvas = byId<HTMLCanvasElement>('globe');
-const globe = setupGlobe(globeCanvas, byId('roads'), byId('globe-pins'), {
+const globe = setupGlobe(globeCanvas, byId('globe-pins'), {
   zoomIn: byId('zoom-in'), zoomOut: byId('zoom-out'), reset: byId('reset'),
 });
 if (!globe) {
@@ -59,46 +55,7 @@ let returnCamera: GlobeCamera | undefined;
 let departure: Animation | undefined;
 let renderedSearch = location.search;
 
-function updateFullscreenLabel() {
-  const expanded = document.fullscreenElement === globeView || globeView.classList.contains('is-expanded');
-  fullscreen.textContent = expanded ? 'Exit full screen' : 'Full screen';
-}
-
-async function leaveFullscreen() {
-  if (document.fullscreenElement === globeView) {
-    await document.exitFullscreen().catch(() => {});
-  }
-  globeView.classList.remove('is-expanded');
-  document.body.classList.remove('globe-expanded');
-  updateFullscreenLabel();
-}
-
-fullscreen.addEventListener('click', async () => {
-  if (document.fullscreenElement === globeView || globeView.classList.contains('is-expanded')) {
-    await leaveFullscreen();
-    return;
-  }
-  if (document.fullscreenEnabled && globeView.requestFullscreen) {
-    try {
-      await globeView.requestFullscreen();
-      return;
-    } catch {
-      // Embedded browsers can restrict native fullscreen.
-    }
-  }
-  globeView.classList.add('is-expanded');
-  document.body.classList.add('globe-expanded');
-  updateFullscreenLabel();
-});
-document.addEventListener('fullscreenchange', updateFullscreenLabel);
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && globeView.classList.contains('is-expanded') && !globeView.querySelector('dialog[open]')) {
-    void leaveFullscreen();
-  }
-});
-
 function showGlobe() {
-  if (document.fullscreenElement === globeView || globeView.classList.contains('is-expanded')) return;
   const stage = globeCanvas.parentElement!;
   const { top, bottom } = stage.getBoundingClientRect();
   if (top < 0 || bottom > window.innerHeight) {
@@ -154,24 +111,6 @@ function journeyLink(id: string) {
   return atlasUrl({ view: 'journeys', journey: id });
 }
 
-function addListItem(title: string, subtitle: string, href: string, location: Coordinates) {
-  const article = node('article', 'index-entry');
-  const titleLink = link(href, title, 'index-link');
-  article.append(titleLink, node('p', 'index-meta', subtitle));
-  if (globe) {
-    const focus = node('button', 'locate', 'Locate');
-    focus.type = 'button';
-    focus.setAttribute('aria-label', `Locate ${title} on the globe`);
-    focus.addEventListener('click', () => {
-      interruptTransition();
-      showGlobe();
-      void globe.focus(location);
-    });
-    article.append(focus);
-  }
-  list.append(article);
-}
-
 function sourceLinks(sources: SourceLink[]) {
   const group = node('ul', 'journal-sources');
   for (const source of sources) {
@@ -185,89 +124,37 @@ function sourceLinks(sources: SourceLink[]) {
   return group;
 }
 
-function renderJournalExtras() {
-  const extras = byId('journal-extras');
-  extras.replaceChildren();
-  if (!privateJournal) return false;
-  const groups = [
-    { name: 'Photo collections', records: privateJournal.photoCollections },
-    { name: 'Places to match', records: privateJournal.placeNotes },
-  ];
-  if (!transport.value || transport.value === 'flight') {
-    groups.unshift({ name: 'Upcoming and incomplete flights', records: privateJournal.flightNotes });
-  }
-  for (const { name, records } of groups) {
-    if (!records.length) continue;
-    const section = node('details', 'journal-extras');
-    section.open = !list.childElementCount;
-    section.append(node('summary', '', `${name} (${records.length})`));
-    for (const record of records) {
-      const entry = node('article', 'index-entry');
-      entry.append(node('h3', '', record.name), node('p', 'index-meta', record.description));
-      if (record.note) entry.append(node('p', '', record.note));
-      if (record.sources.length) entry.append(sourceLinks(record.sources));
-      section.append(entry);
-    }
-    extras.append(section);
-  }
-  return Boolean(extras.childElementCount);
-}
-
 function renderOverview() {
   const showingJourneys = mode === 'journeys';
   placesButton.setAttribute('aria-pressed', String(!showingJourneys));
   journeysButton.setAttribute('aria-pressed', String(showingJourneys));
   overview.dataset.view = mode;
-  journeyIndex.hidden = !showingJourneys;
 
-  if (!showingJourneys) {
-    const pins = cities.map(city => ({
+  const pins: GlobePin[] = showingJourneys
+    ? journeys.flatMap(journey => {
+      const first = journey.stops[0];
+      const last = journey.stops.at(-1);
+      if (!first || !last) return [];
+      const href = journeyLink(journey.id);
+      const description = `${journey.name} · ${journey.date ?? journey.year}`;
+      return (first === last ? [first] : [first, last]).map(stop => ({
+        name: stop.name, coordinates: stop.coordinates, href, description,
+      }));
+    })
+    : cities.map(city => ({
       name: city.name, region: city.region, href: cityLink(city.id), coordinates: city.coordinates,
     }));
-    globe?.setContent(pins, [], []);
-    if (!globe) {
-      byId('places-fallback').replaceChildren(...pins.map(pin => {
-        const row = node('li');
-        row.append(link(pin.href, pin.name));
-        return row;
-      }));
-    }
-    return;
-  }
 
-  byId('places-fallback').replaceChildren();
-  list.replaceChildren();
-  const visibleJourneys = journeys.filter(journey => !transport.value || journey.mode === transport.value);
-  const arcs: Arc[] = [];
-  const surfacePaths: Coordinates[][] = [];
-  const pins: GlobePin[] = [];
-  for (const journey of visibleJourneys) {
-    const [first] = journey.stops;
-    const last = journey.stops.at(-1)!;
-    const href = journeyLink(journey.id);
-    const date = journey.date ?? journey.year;
-    addListItem(journey.name, [journeyMode[journey.mode], date, journey.evidence].filter(Boolean).join(' · '),
-      href, first.coordinates);
-    const description = `${journey.name} · ${date}`;
-    pins.push({ name: first.name, href, coordinates: first.coordinates, description });
-    if (first !== last) pins.push({ name: last.name, href, coordinates: last.coordinates, description });
-    if (journey.mode === 'flight') {
-      journey.stops.slice(1).forEach((stop, index) => arcs.push({
-        from: journey.stops[index].coordinates, to: stop.coordinates,
-      }));
-    } else if (journey.stops.length > 1) {
-      surfacePaths.push(journey.stops.map(stop => stop.coordinates));
-    }
+  if (globe) {
+    globe.setContent(pins);
+  } else {
+    const links = new Map(pins.map(pin => [pin.href, pin.description ?? pin.name]));
+    byId('globe-fallback-links').replaceChildren(...[...links].map(([href, title]) => {
+      const row = node('li');
+      row.append(link(href, title));
+      return row;
+    }));
   }
-  globe?.setContent(pins, arcs, surfacePaths);
-  if (arcs.length || surfacePaths.length) {
-    const legend = node('p', 'legend');
-    if (arcs.length) legend.append(node('span', 'legend-flight', 'Flight'));
-    if (surfacePaths.length) legend.append(node('span', 'legend-road', 'Approximate route between stops'));
-    list.append(legend);
-  }
-  const hasJournalExtras = renderJournalExtras();
-  if (!list.childElementCount && !hasJournalExtras) list.append(node('p', 'no-results', 'No journeys match this travel mode.'));
 }
 
 function detailHeading(label: string, title: string, metadata: string) {
@@ -283,11 +170,11 @@ function detailHeading(label: string, title: string, metadata: string) {
   return group;
 }
 
-async function attachMap(container: HTMLElement, stops: City['places'] | Journey['stops'], path: Coordinates[] | null, select: (index: number) => void) {
+async function attachMap(container: HTMLElement, stops: City['places'] | Journey['stops'], route: Journey['mode'] | null, select: (index: number) => void) {
   try {
     const { mountMap } = await import('./map');
     if (!container.isConnected) return;
-    map = mountMap(container, stops, path, select);
+    map = mountMap(container, stops, route, select);
     updatePlaceSelection(Boolean(selectedPlace), false);
   } catch {
     if (container.isConnected) {
@@ -373,15 +260,15 @@ function showJourney(journey: Journey) {
     [journeyMode[journey.mode], journey.date ?? journey.year, journey.evidence].filter(Boolean).join(' · ')));
   if (journey.note) detail.append(node('p', '', journey.note));
   if (journey.sources?.length) detail.append(sourceLinks(journey.sources));
-  if (journey.mode !== 'flight') {
-    const container = node('div', 'detail-map');
-    const path = journey.stops.length > 1 ? journey.stops.map(stop => stop.coordinates) : null;
-    detail.append(container);
-    if (path) detail.append(node('p', 'eyebrow map-caption', 'Approximate line between stops'));
-    void attachMap(container, journey.stops, path,
-      index => scrollToEntry(detail.querySelectorAll('.itinerary > li')[index]),
-    );
+  const container = node('div', 'detail-map');
+  detail.append(container);
+  if (journey.stops.length > 1) {
+    detail.append(node('p', 'eyebrow map-caption',
+      journey.mode === 'flight' ? 'Approximate flight path' : 'Approximate line between stops'));
   }
+  void attachMap(container, journey.stops, journey.mode,
+    index => scrollToEntry(detail.querySelectorAll('.itinerary > li')[index]),
+  );
   const stops = node('ol', 'itinerary');
   for (const stop of journey.stops) {
     const entry = node('li');
@@ -410,7 +297,6 @@ function renderRoute(moveFocus = false, animate = false) {
 
   if (changed) {
     currentDetail = nextDetail;
-    if (nextDetail && globeView.classList.contains('is-expanded')) void leaveFullscreen();
     map?.hide();
     map = undefined;
     detail.replaceChildren();
@@ -419,7 +305,7 @@ function renderRoute(moveFocus = false, animate = false) {
     if (city) showCity(city);
     else if (journey) showJourney(journey);
     if (moveFocus) {
-      atlas.scrollIntoView({ block: 'start', behavior: 'instant' });
+      atlasAnchor.scrollIntoView({ block: 'start', behavior: 'instant' });
       const viewButton = mode === 'journeys' ? journeysButton : placesButton;
       (nextDetail ? detail.querySelector('h2') : viewButton)?.focus({ preventScroll: true });
     }
@@ -453,7 +339,6 @@ function switchMode(value: typeof mode) {
   interruptTransition();
   history.pushState(null, '', atlasUrl({ view: value === 'places' ? '' : value }));
   renderRoute();
-  if (mode === 'journeys' && !reducedMotion.matches) reveal(journeyIndex, 0, 300);
 }
 
 async function openAtlasLink(anchor: HTMLAnchorElement) {
@@ -464,9 +349,9 @@ async function openAtlasLink(anchor: HTMLAnchorElement) {
   const fromOverview = !overview.hidden;
   const before = fromOverview ? globe?.camera() : undefined;
   if (globe && fromOverview && target) {
-    if (city || (journey && journey.mode !== 'flight')) void import('./map').catch(() => {});
+    if (city || journey) void import('./map').catch(() => {});
     showGlobe();
-    if (!(await globe.focus(target, true))) return;
+    if (!(await globe.focus(target))) return;
   }
 
   if (!reducedMotion.matches && (!fromOverview || target)) {
@@ -479,7 +364,6 @@ async function openAtlasLink(anchor: HTMLAnchorElement) {
   }
 
   if (before && target) returnCamera = before;
-  await leaveFullscreen();
   history.pushState(null, '', anchor.href);
   departure?.cancel();
   departure = undefined;
@@ -488,11 +372,6 @@ async function openAtlasLink(anchor: HTMLAnchorElement) {
 
 placesButton.addEventListener('click', () => switchMode('places'));
 journeysButton.addEventListener('click', () => switchMode('journeys'));
-transport.addEventListener('change', () => {
-  interruptTransition();
-  renderOverview();
-  if (!reducedMotion.matches) reveal(list, 0, 300);
-});
 document.addEventListener('click', event => {
   const anchor = event.target instanceof Element ? event.target.closest('a') : null;
   if (!anchor || event.defaultPrevented || event.button || event.ctrlKey || event.metaKey ||
@@ -516,16 +395,21 @@ async function start() {
   if (privateJournal) {
     cities = privateJournal.cities;
     journeys = privateJournal.journeys;
-    if (journeys.some(journey => journey.mode === 'rail')) transport.add(new Option('Trains', 'rail'));
-    if (journeys.some(journey => journey.mode === 'cruise')) transport.add(new Option('Cruises', 'cruise'));
     byId('journal-label').textContent = 'Private journal · Local preview';
   }
   const params = new URLSearchParams(location.search);
   const opensAtlas = !location.hash &&
     (legacyAtlasPath || params.has('city') || params.has('journey') || params.get('view') === 'journeys');
   renderRoute(opensAtlas);
-  if (opensAtlas && !currentDetail) atlas.scrollIntoView({ block: 'start', behavior: 'instant' });
+  if (opensAtlas && !currentDetail) atlasAnchor.scrollIntoView({ block: 'start', behavior: 'instant' });
   revealGlobeOnScroll();
 }
+
+const slideSizes = new ResizeObserver(entries => {
+  for (const { target } of entries) {
+    if (target instanceof HTMLElement) target.style.setProperty('--slide-height', `${target.offsetHeight}px`);
+  }
+});
+document.querySelectorAll('.page-slide').forEach(slide => slideSizes.observe(slide));
 
 void start();

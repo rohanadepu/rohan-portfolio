@@ -31,7 +31,7 @@ button { cursor: pointer; }
 .navigation, .socials, footer { display: flex; align-items: center; }
 .theme-toggle {
   position: fixed;
-  z-index: 2;
+  z-index: 8;
   inset-block-start: 1rem;
   inset-inline-end: max(clamp(1.25rem, 5vw, 5.25rem), calc((100% - 1152px) / 2));
   display: grid;
@@ -62,9 +62,9 @@ p { line-height: 1.65; }
 .personal-intro {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(13rem, .58fr);
-  align-items: end;
+  align-items: center;
   gap: clamp(1.75rem, 6vw, 6rem);
-  min-height: min(73svh, 44rem);
+  min-height: 100svh;
   padding: clamp(5rem, 12vh, 8.5rem) 0 clamp(2.75rem, 7vh, 5rem);
   border-bottom: 1px solid var(--line);
 }
@@ -96,11 +96,14 @@ p { line-height: 1.65; }
   background: var(--tint);
 }
 .portrait { height: 100%; object-fit: cover; object-position: center 36%; filter: grayscale(1) contrast(.94); }
+.atlas-page { min-height: 100svh; }
 .portfolio-section {
   display: grid;
   grid-template-columns: minmax(10rem, .8fr) minmax(0, 2fr);
   gap: clamp(1.25rem, 5vw, 4.5rem);
+  align-content: center;
   align-items: start;
+  min-height: 56svh;
   border-top: 1px solid var(--line);
   padding: clamp(2rem, 4.5vw, 3.8rem) 0;
   scroll-margin-top: 1rem;
@@ -120,6 +123,25 @@ p { line-height: 1.65; }
 footer { border-top: 1px solid var(--line); justify-content: space-between; padding: 1.2rem 0 2rem; color: var(--quiet); font: .8rem var(--mono); }
 @media (prefers-reduced-motion: no-preference) {
   :root { scroll-behavior: smooth; }
+  .page-slide {
+    position: sticky;
+    top: min(0px, calc(100svh - var(--slide-height, 0px)));
+    isolation: isolate;
+  }
+  .page-slide::before, footer::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 0 calc(50% - 50vw);
+    background: var(--paper);
+  }
+  .atlas-page, .portfolio-section { box-shadow: 0 -1px var(--line); }
+  .atlas-page { z-index: 1; }
+  .atlas-page:has(#detail:not([hidden])) { position: relative; top: auto; }
+  .about-slide { z-index: 2; }
+  .projects-slide { z-index: 3; }
+  .interests-slide { z-index: 4; }
+  footer { position: relative; z-index: 5; isolation: isolate; }
   .intro-role, .intro-summary, .intro-actions {
     animation: intro-rise .66s cubic-bezier(.22,.61,.36,1) both;
   }
@@ -136,8 +158,8 @@ footer { border-top: 1px solid var(--line); justify-content: space-between; padd
   .personal-intro {
     grid-template-columns: minmax(0, 1fr) clamp(4.75rem, 25vw, 9rem);
     align-items: center;
+    align-content: center;
     gap: .85rem .75rem;
-    min-height: auto;
     padding: 5.15rem 0 2.5rem;
   }
   .intro-copy { display: contents; }

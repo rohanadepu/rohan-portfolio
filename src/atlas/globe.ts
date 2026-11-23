@@ -1,4 +1,4 @@
-import createGlobe, { type Arc, type COBEOptions } from 'cobe';
+import createGlobe, { type COBEOptions } from 'cobe';
 import type { Coordinates } from './data';
 
 import { setupPins, type GlobePin } from './pins';
@@ -13,18 +13,18 @@ export const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const ease = (progress: number) => progress * progress * (3 - 2 * progress);
 
-type GlobePalette = Pick<COBEOptions, 'dark' | 'mapBrightness' | 'baseColor' | 'glowColor' | 'arcColor'>;
+type GlobePalette = Pick<COBEOptions, 'dark' | 'mapBrightness' | 'baseColor' | 'glowColor'>;
 const lightGlobe: GlobePalette = {
   dark: 0, mapBrightness: 5.6,
-  baseColor: [0.98, 0.97, 0.945], glowColor: [0.44, 0.43, 0.4], arcColor: [0.21, 0.20, 0.17],
+  baseColor: [0.98, 0.97, 0.945], glowColor: [0.44, 0.43, 0.4],
 };
 const darkGlobe: GlobePalette = {
   dark: 1, mapBrightness: 3.4,
-  baseColor: [0.62, 0.60, 0.55], glowColor: [0.08, 0.08, 0.07], arcColor: [0.89, 0.86, 0.78],
+  baseColor: [0.62, 0.60, 0.55], glowColor: [0.08, 0.08, 0.07],
 };
 
 export function setupGlobe(
-  canvas: HTMLCanvasElement, roads: HTMLCanvasElement, pins: HTMLElement,
+  canvas: HTMLCanvasElement, pins: HTMLElement,
   controls: { zoomIn: HTMLButtonElement; zoomOut: HTMLButtonElement; reset: HTMLButtonElement },
 ) {
   const dpr = Math.min(window.devicePixelRatio, 2);
@@ -35,15 +35,11 @@ export function setupGlobe(
   let width = 1;
   let height = 1;
   const palette = () => document.documentElement.dataset.theme === 'dark' ? darkGlobe : lightGlobe;
-  const readInk = () => getComputedStyle(document.documentElement).getPropertyValue('--ink');
-  let routeColor = readInk();
   const globe = createGlobe(canvas, {
     width, height, phi, theta, scale, devicePixelRatio: dpr,
     diffuse: 1.4, mapSamples: 18000, markerColor: [0.14, 0.13, 0.11], markerElevation: 0,
-    arcHeight: 0.22, arcWidth: 0.64, context, ...palette(),
+    context, ...palette(),
   });
-  const roadContext = roads.getContext('2d');
-  let routes: Coordinates[][] = [];
   const pinLayer = setupPins(pins, canvas, (coordinates, zoomLevel) => {
     void moveTo(cameraAt(coordinates, zoomLevel + .04), 680, true);
   });
@@ -64,33 +60,14 @@ export function setupGlobe(
     return {
       x: width / 2 + x * screenRadius() * scale,
       y: height / 2 - y * screenRadius() * scale,
-      front: z >= 0,
+      front: z > 0,
     };
   }
 
   function paint(overrides: Partial<COBEOptions> = {}) {
     // COBE measures the sphere against canvas height. Fit it to the shorter edge.
     globe.update({ phi, theta, scale: scale * Math.min(1, width / height), ...overrides });
-    pinLayer.render(position, width, height, scale);
-    if (!roadContext) return;
-    roadContext.setTransform(dpr, 0, 0, dpr, 0, 0);
-    roadContext.clearRect(0, 0, width, height);
-    roadContext.lineWidth = 1.8;
-    roadContext.strokeStyle = routeColor;
-    roadContext.setLineDash([4, 4]);
-    for (const route of routes) {
-      roadContext.beginPath();
-      let visible = false;
-      for (const point of route) {
-        const p = position(point);
-        if (p.front) {
-          if (visible) roadContext.lineTo(p.x, p.y);
-          else roadContext.moveTo(p.x, p.y);
-        }
-        visible = p.front;
-      }
-      roadContext.stroke();
-    }
+    pinLayer.render(position, width, height, scale, screenRadius() * scale);
   }
 
   function requestPaint() {
@@ -165,15 +142,9 @@ export function setupGlobe(
     return { phi: -Math.PI / 2 - longitude * radians, theta: latitude * radians, scale: zoomLevel };
   }
 
-  async function focus(coordinates: Coordinates, open = false) {
-    pinLayer.highlight();
-    const zoomLevel = open ? Math.min(maximumScale, Math.max(2.45, scale * 1.12)) : Math.max(1.18, scale);
-    const arrived = await moveTo(cameraAt(coordinates, zoomLevel), open ? 1400 : 900, open);
-    if (arrived && !open) {
-      pinLayer.highlight(coordinates);
-      paint();
-    }
-    return arrived;
+  function focus(coordinates: Coordinates) {
+    const zoomLevel = Math.min(maximumScale, Math.max(2.45, scale * 1.12));
+    return moveTo(cameraAt(coordinates, zoomLevel), 1400, true);
   }
 
   const pointers = new Map<number, { x: number; y: number }>();
@@ -210,7 +181,7 @@ export function setupGlobe(
     if (pointers.size === 0) canvas.classList.remove('dragging');
   });
   canvas.addEventListener('wheel', event => {
-    if (event.ctrlKey || document.activeElement === canvas || canvas.closest('.globe-view:is(:fullscreen, .is-expanded)')) {
+    if (event.ctrlKey || document.activeElement === canvas) {
       event.preventDefault();
       cancelMotion?.();
       zoom(Math.exp(-clamp(event.deltaY, -100, 100) * 0.003), { x: event.clientX, y: event.clientY });
@@ -247,15 +218,10 @@ export function setupGlobe(
     if (!nextWidth || !nextHeight || (width === nextWidth && height === nextHeight)) return;
     width = nextWidth;
     height = nextHeight;
-    roads.width = Math.round(width * dpr);
-    roads.height = Math.round(height * dpr);
     paint({ width, height });
   }).observe(canvas.parentElement!);
 
-  window.addEventListener('portfolio-themechange', () => {
-    routeColor = readInk();
-    paint(palette());
-  });
+  window.addEventListener('portfolio-themechange', () => paint(palette()));
 
   // COBE decodes the land texture asynchronously and draws on the next update.
   window.setTimeout(requestPaint, 250);
@@ -266,10 +232,9 @@ export function setupGlobe(
     focus,
     stop: () => cancelMotion?.(),
     markerLocation: pinLayer.markerLocation,
-    setContent(items: GlobePin[], arcs: Arc[], roadPaths: Coordinates[][]) {
-      routes = roadPaths;
+    setContent(items: GlobePin[]) {
       pinLayer.setContent(items);
-      paint({ arcs });
+      paint();
     },
   };
 }

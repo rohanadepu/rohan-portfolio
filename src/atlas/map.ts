@@ -1,7 +1,8 @@
 import { LngLatBounds, Map, Marker, setWorkerUrl, type TransformStyleFunction } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { Coordinates } from './data';
+import type { Coordinates, Journey } from './data';
+import { routePath } from './geography';
 
 setWorkerUrl(workerUrl);
 
@@ -12,9 +13,10 @@ interface MapStop {
 
 export const longitudeFirst = ([latitude, longitude]: Coordinates): [number, number] => [longitude, latitude];
 
-export function mountMap(container: HTMLElement, stops: MapStop[], path: Coordinates[] | null, select: (index: number) => void) {
+export function mountMap(container: HTMLElement, stops: MapStop[], route: Journey['mode'] | null, select: (index: number) => void) {
   const [first] = stops;
   if (!first) throw new Error('The map has no stops.');
+  const path = route && stops.length > 1 ? routePath(stops.map(stop => stop.coordinates), route === 'flight') : null;
 
   const mapStyle = () => {
     const style = document.documentElement.dataset.theme === 'dark' ? 'fiord' : 'positron';
@@ -28,7 +30,7 @@ export function mountMap(container: HTMLElement, stops: MapStop[], path: Coordin
         type: 'geojson',
         data: {
           type: 'Feature', properties: {},
-          geometry: { type: 'LineString', coordinates: path.map(longitudeFirst) },
+          geometry: { type: 'MultiLineString', coordinates: path.lines },
         },
       },
     },
@@ -49,14 +51,14 @@ export function mountMap(container: HTMLElement, stops: MapStop[], path: Coordin
     center: longitudeFirst(first.coordinates),
     zoom: 13.5,
     cooperativeGestures: true,
-    renderWorldCopies: false,
+    renderWorldCopies: Boolean(path),
   });
 
   const status = document.createElement('p');
   status.className = 'map-status';
   status.setAttribute('role', 'status');
   status.hidden = true;
-  status.textContent = 'Street tiles could not load. The numbered stops are still available.';
+  status.textContent = 'Map tiles could not load. The numbered stops are still available.';
   container.append(status);
   map.on('error', () => { status.hidden = map.loaded(); });
   map.on('idle', () => { status.hidden = true; });
@@ -73,7 +75,8 @@ export function mountMap(container: HTMLElement, stops: MapStop[], path: Coordin
 
   if (stops.length > 1) {
     const bounds = new LngLatBounds();
-    stops.forEach(stop => bounds.extend(longitudeFirst(stop.coordinates)));
+    const points = path?.bounds ?? stops.map(stop => longitudeFirst(stop.coordinates));
+    points.forEach(point => bounds.extend(point));
     map.fitBounds(bounds, { padding: 48, maxZoom: 13.75, duration: 0 });
   }
 

@@ -1,4 +1,5 @@
 import type { Coordinates } from './data';
+import { unitVector, vectorCoordinates } from './geography';
 
 export interface GlobePin {
   name: string;
@@ -37,15 +38,8 @@ interface Bounds {
   bottom: number;
 }
 
-const radians = Math.PI / 180;
 const regionZoom = 1.22;
 const cityZoom = 1.62;
-const labelOffsets = [
-  [0, 0], [0, -45], [0, 45], [-44, 0], [44, 0],
-  [-36, -45], [36, -45], [-36, 45], [36, 45],
-  [-64, 0], [64, 0], [0, -90], [0, 90],
-];
-
 function areaOf(region?: string): Marker['area'] {
   const parts = region?.split(',').map(part => part.trim()).filter(Boolean);
   const country = parts?.pop();
@@ -54,12 +48,6 @@ function areaOf(region?: string): Marker['area'] {
     country: country === 'USA' ? 'United States' : country,
     region: parts?.join(', ') || undefined,
   };
-}
-
-function unitVector([latitude, longitude]: Coordinates): Marker['vector'] {
-  const lat = latitude * radians;
-  const lon = longitude * radians;
-  return [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
 }
 
 function sameLocation(first: Marker, second: Marker) {
@@ -77,7 +65,7 @@ function centerOf(members: Marker[]): Coordinates {
     y += vector[1];
     z += vector[2];
   }
-  return [Math.atan2(z, Math.hypot(x, y)) / radians, Math.atan2(y, x) / radians];
+  return vectorCoordinates([x, y, z]);
 }
 
 function groupByArea(markers: Marker[], useRegion: boolean) {
@@ -105,40 +93,18 @@ function makeLabel(name: string) {
   return label;
 }
 
-function place(element: HTMLElement, group: Group, label: string, width: number, height: number, occupied: Bounds[]) {
-  const halfLabel = Math.min(58, Math.max(14, (label.length * 7.3 + 15) / 2));
-  for (const [dx, dy] of labelOffsets) {
-    const x = group.x + dx;
-    const y = group.y + dy;
-    if ((dx || dy) && (x < 15 || x > width - 15 || y < 15 || y > height - 38)) continue;
-    const labelX = Math.max(halfLabel, Math.min(width - halfLabel, x));
-    const box = {
-      left: Math.min(x - 14, labelX - halfLabel),
-      right: Math.max(x + 14, labelX + halfLabel),
-      top: y - 14,
-      bottom: y + 35,
-    };
-    const overlaps = occupied.some(other =>
-      box.left < other.right && box.right > other.left && box.top < other.bottom && box.bottom > other.top,
-    );
-    if (overlaps) continue;
-    occupied.push(box);
-    element.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
-    element.style.setProperty('--label-offset', `${labelX - x}px`);
-    element.style.setProperty('--pin-stem-length', `${Math.hypot(dx, dy)}px`);
-    element.style.setProperty('--pin-stem-angle', `${Math.atan2(-dy, -dx)}rad`);
-    return;
-  }
-  element.style.transform = `translate(${group.x}px, ${group.y}px) translate(-50%, -50%)`;
-  element.style.setProperty('--label-offset', '0px');
-  element.style.setProperty('--pin-stem-length', '0px');
-}
-
-function makeStem() {
-  const stem = document.createElement('span');
-  stem.className = 'pin-stem';
-  stem.setAttribute('aria-hidden', 'true');
-  return stem;
+function place(element: HTMLElement, { x, y }: Group, label: string, width: number, height: number, occupied: Bounds[]) {
+  element.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+  const halfLabel = Math.min(58, (label.length * 7.3 + 15) / 2);
+  const available = (box: Bounds) => box.left >= 0 && box.right <= width && box.top >= 0 && box.bottom <= height &&
+    !occupied.some(other => box.left < other.right && box.right > other.left &&
+      box.top < other.bottom && box.bottom > other.top);
+  const below = { left: x - halfLabel, right: x + halfLabel, top: y + 12, bottom: y + 34 };
+  const above = { ...below, top: y - 34, bottom: y - 12 };
+  const slot = available(below) ? below : available(above) ? above : undefined;
+  element.classList.toggle('label-above', slot === above);
+  element.classList.toggle('label-on-demand', !slot);
+  if (slot) occupied.push(slot);
 }
 
 export function setupPins(
@@ -153,7 +119,6 @@ export function setupPins(
   let markers: Marker[] = [];
   let countryGroups: ReturnType<typeof groupByArea> = [];
   let regionGroups: ReturnType<typeof groupByArea> = [];
-  let highlighted: Coordinates | undefined;
 
   dialog.addEventListener('click', event => {
     if (event.target instanceof Element && event.target.closest('a')) dialog.close();
@@ -178,19 +143,16 @@ export function setupPins(
     dialog.showModal();
   }
 
-  function render(project: (coordinates: Coordinates) => ScreenPoint, width: number, height: number, scale: number) {
+  function render(project: (coordinates: Coordinates) => ScreenPoint, width: number, height: number, scale: number, horizon: number) {
+    container.style.setProperty('--pin-horizon', `${horizon}px`);
     const groups: Group[] = [];
     const onScreen = (point: ScreenPoint) =>
       point.front && point.x >= 12 && point.y >= 12 && point.x <= width - 12 && point.y <= height - 12;
     const useAreaPins = scale < cityZoom;
     if (useAreaPins) {
       for (const group of scale < regionZoom ? countryGroups : regionGroups) {
-        let anchor = project(group.center);
-        if (!onScreen(anchor)) {
-          const visible = group.members.map(marker => project(marker.pin.coordinates)).find(onScreen);
-          if (!visible) continue;
-          anchor = visible;
-        }
+        const anchor = project(group.center);
+        if (!onScreen(anchor)) continue;
         groups.push({ ...group, x: anchor.x, y: anchor.y });
       }
     }
@@ -202,7 +164,10 @@ export function setupPins(
       if (!onScreen(point)) continue;
       const group = localGroups.find(candidate => {
         const first = candidate.members[0];
-        return marker.area?.country === first.area?.country && sameLocation(marker, first);
+        if (marker.area?.country !== first.area?.country) return false;
+        if (sameLocation(marker, first)) return true;
+        return Boolean(marker.area && marker.area.region === first.area?.region &&
+          Math.hypot(point.x - candidate.x, point.y - candidate.y) < 12);
       });
       if (!group) {
         localGroups.push({ x: point.x, y: point.y, members: [marker] });
@@ -216,14 +181,14 @@ export function setupPins(
 
     const singlePins = new Set<Marker>();
     const visibleClusters = new Set<string>();
-    const occupied: Bounds[] = [];
+    const occupied = groups.map(({ x, y }) => ({
+      left: x - 12, right: x + 12, top: y - 12, bottom: y + 12,
+    }));
     for (const group of groups) {
       const [first] = group.members;
-      const located = group.members.some(({ pin }) => pin.coordinates === highlighted);
       if (group.members.length === 1 && !group.zoomLevel) {
         singlePins.add(first);
         place(first.element, group, first.pin.name, width, height, occupied);
-        first.element.classList.toggle('located', located);
         continue;
       }
 
@@ -240,7 +205,7 @@ export function setupPins(
         count.textContent = String(group.members.length);
         count.setAttribute('aria-hidden', 'true');
         const caption = makeLabel('');
-        button.append(makeStem(), count, caption);
+        button.append(count, caption);
         button.addEventListener('click', () => choose(group, caption.textContent ?? label));
         cluster = { button, caption };
         clusters.set(key, cluster);
@@ -252,7 +217,6 @@ export function setupPins(
         const count = group.members.length;
         button.setAttribute('aria-label', `${label}, ${count} ${count === 1 ? 'pin' : 'pins'}`);
       }
-      button.classList.toggle('located', located);
       place(button, group, label, width, height, occupied);
     }
 
@@ -271,20 +235,16 @@ export function setupPins(
 
   return {
     render,
-    highlight(coordinates?: Coordinates) {
-      highlighted = coordinates;
-    },
     markerLocation: (anchor: HTMLAnchorElement) => markers.find(({ element }) => element === anchor)?.pin.coordinates,
     setContent(items: GlobePin[]) {
       if (dialog.open) dialog.close();
       clusters.clear();
-      highlighted = undefined;
       markers = items.map((pin, id) => {
         const element = document.createElement('a');
         element.className = 'globe-pin';
         element.href = pin.href;
         element.setAttribute('aria-label', pin.description ?? pin.name);
-        element.append(makeStem(), makeLabel(pin.name));
+        element.append(makeLabel(pin.name));
         return { id, pin, element, area: areaOf(pin.region), vector: unitVector(pin.coordinates) };
       });
       countryGroups = groupByArea(markers, false);

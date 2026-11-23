@@ -31,17 +31,23 @@
           <div class="atlas-layout">
             <section class="globe-panel" aria-label="Interactive globe">
               <div class="globe-view" id="globe-view">
-                <div class="globe-stage">
+                <div class="globe-stage" id="globe-stage">
                   <canvas id="globe" aria-label="Globe. Use arrow keys to rotate and plus or minus to zoom." tabindex="0"></canvas>
                   <canvas id="roads" aria-hidden="true"></canvas>
                   <div id="globe-pins"></div>
                 </div>
-                <div class="globe-actions" role="group" aria-label="Globe zoom">
+                <div class="globe-actions" role="group" aria-label="Globe controls">
                   <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
                   <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
                   <button id="reset" type="button">Reset</button>
+                  <button id="fullscreen" type="button" aria-controls="globe-stage">Full screen</button>
                 </div>
                 <p class="eyebrow globe-help">Drag to turn · Pinch or scroll to zoom</p>
+                <dialog id="cluster-choices" class="cluster-choices" aria-labelledby="cluster-title">
+                  <form method="dialog"><button class="cluster-close" type="submit">Close</button></form>
+                  <h2 id="cluster-title"></h2>
+                  <ul id="cluster-links"></ul>
+                </dialog>
               </div>
               <div class="unavailable" id="globe-fallback" hidden>
                 <p>The globe is unavailable on this device.</p>
@@ -58,11 +64,6 @@
             </aside>
           </div>
           <p id="journal-label" class="eyebrow sample-label">Sample travel entries</p>
-          <dialog id="cluster-choices" class="cluster-choices" aria-labelledby="cluster-title">
-            <form method="dialog"><button class="cluster-close" type="submit">Close</button></form>
-            <h2 id="cluster-title"></h2>
-            <ul id="cluster-links"></ul>
-          </dialog>
         </div>
         <div id="detail" hidden></div>
       </section>

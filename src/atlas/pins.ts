@@ -37,10 +37,9 @@ interface Bounds {
   bottom: number;
 }
 
-const groupDistance = 56;
 const radians = Math.PI / 180;
-const regionZoom = 2.4;
-const cityZoom = 5.5;
+const regionZoom = 1.22;
+const cityZoom = 1.62;
 const labelOffsets = [
   [0, 0], [0, -45], [0, 45], [-44, 0], [44, 0],
   [-36, -45], [36, -45], [-36, 45], [36, 45],
@@ -106,13 +105,13 @@ function makeLabel(name: string) {
   return label;
 }
 
-function place(element: HTMLElement, group: Group, label: string, size: number, occupied: Bounds[]) {
+function place(element: HTMLElement, group: Group, label: string, width: number, height: number, occupied: Bounds[]) {
   const halfLabel = Math.min(58, Math.max(14, (label.length * 7.3 + 15) / 2));
   for (const [dx, dy] of labelOffsets) {
     const x = group.x + dx;
     const y = group.y + dy;
-    if ((dx || dy) && (x < 15 || x > size - 15 || y < 15 || y > size - 38)) continue;
-    const labelX = Math.max(halfLabel, Math.min(size - halfLabel, x));
+    if ((dx || dy) && (x < 15 || x > width - 15 || y < 15 || y > height - 38)) continue;
+    const labelX = Math.max(halfLabel, Math.min(width - halfLabel, x));
     const box = {
       left: Math.min(x - 14, labelX - halfLabel),
       right: Math.max(x + 14, labelX + halfLabel),
@@ -145,8 +144,7 @@ function makeStem() {
 export function setupPins(
   container: HTMLElement,
   canvas: HTMLCanvasElement,
-  canZoom: () => boolean,
-  zoomTo: (coordinates: Coordinates, zoomLevel?: number) => void,
+  zoomTo: (coordinates: Coordinates, zoomLevel: number) => void,
 ) {
   const dialog = document.querySelector<HTMLDialogElement>('#cluster-choices')!;
   const title = dialog.querySelector('h2')!;
@@ -163,7 +161,7 @@ export function setupPins(
 
   function choose(group: Group, label: string) {
     const { members, zoomLevel } = group;
-    if (zoomLevel || (canZoom() && members.some(marker => !sameLocation(marker, members[0])))) {
+    if (zoomLevel) {
       zoomTo(centerOf(members), zoomLevel);
       return;
     }
@@ -180,10 +178,10 @@ export function setupPins(
     dialog.showModal();
   }
 
-  function render(project: (coordinates: Coordinates) => ScreenPoint, size: number, scale: number) {
+  function render(project: (coordinates: Coordinates) => ScreenPoint, width: number, height: number, scale: number) {
     const groups: Group[] = [];
     const onScreen = (point: ScreenPoint) =>
-      point.front && point.x >= 12 && point.y >= 12 && point.x <= size - 12 && point.y <= size - 12;
+      point.front && point.x >= 12 && point.y >= 12 && point.x <= width - 12 && point.y <= height - 12;
     const useAreaPins = scale < cityZoom;
     if (useAreaPins) {
       for (const group of scale < regionZoom ? countryGroups : regionGroups) {
@@ -204,9 +202,7 @@ export function setupPins(
       if (!onScreen(point)) continue;
       const group = localGroups.find(candidate => {
         const first = candidate.members[0];
-        if (!marker.area || !first.area) return !marker.area && !first.area && sameLocation(marker, first);
-        return marker.area.country === first.area.country && marker.area.region === first.area.region &&
-          (point.x - candidate.x) ** 2 + (point.y - candidate.y) ** 2 < groupDistance ** 2;
+        return marker.area?.country === first.area?.country && sameLocation(marker, first);
       });
       if (!group) {
         localGroups.push({ x: point.x, y: point.y, members: [marker] });
@@ -226,7 +222,7 @@ export function setupPins(
       const located = group.members.some(({ pin }) => pin.coordinates === highlighted);
       if (group.members.length === 1 && !group.zoomLevel) {
         singlePins.add(first);
-        place(first.element, group, first.pin.name, size, occupied);
+        place(first.element, group, first.pin.name, width, height, occupied);
         first.element.classList.toggle('located', located);
         continue;
       }
@@ -257,7 +253,7 @@ export function setupPins(
         button.setAttribute('aria-label', `${label}, ${count} ${count === 1 ? 'pin' : 'pins'}`);
       }
       button.classList.toggle('located', located);
-      place(button, group, label, size, occupied);
+      place(button, group, label, width, height, occupied);
     }
 
     for (const marker of markers) {

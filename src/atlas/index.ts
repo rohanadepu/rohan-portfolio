@@ -34,12 +34,14 @@ const journeyIndex = byId('journey-index');
 const transport = byId<HTMLSelectElement>('transport');
 const placesButton = byId<HTMLButtonElement>('places-mode');
 const journeysButton = byId<HTMLButtonElement>('journeys-mode');
+const globeView = byId('globe-view');
+const fullscreen = byId<HTMLButtonElement>('fullscreen');
 const globeCanvas = byId<HTMLCanvasElement>('globe');
 const globe = setupGlobe(globeCanvas, byId('roads'), byId('globe-pins'), {
   zoomIn: byId('zoom-in'), zoomOut: byId('zoom-out'), reset: byId('reset'),
 });
 if (!globe) {
-  byId('globe-view').hidden = true;
+  globeView.hidden = true;
   byId('globe-fallback').hidden = false;
 }
 
@@ -56,7 +58,46 @@ let returnCamera: GlobeCamera | undefined;
 let departure: Animation | undefined;
 let renderedSearch = location.search;
 
+function updateFullscreenLabel() {
+  const expanded = document.fullscreenElement === globeView || globeView.classList.contains('is-expanded');
+  fullscreen.textContent = expanded ? 'Exit full screen' : 'Full screen';
+}
+
+async function leaveFullscreen() {
+  if (document.fullscreenElement === globeView) {
+    await document.exitFullscreen().catch(() => {});
+  }
+  globeView.classList.remove('is-expanded');
+  document.body.classList.remove('globe-expanded');
+  updateFullscreenLabel();
+}
+
+fullscreen.addEventListener('click', async () => {
+  if (document.fullscreenElement === globeView || globeView.classList.contains('is-expanded')) {
+    await leaveFullscreen();
+    return;
+  }
+  if (document.fullscreenEnabled && globeView.requestFullscreen) {
+    try {
+      await globeView.requestFullscreen();
+      return;
+    } catch {
+      // Embedded browsers can restrict native fullscreen.
+    }
+  }
+  globeView.classList.add('is-expanded');
+  document.body.classList.add('globe-expanded');
+  updateFullscreenLabel();
+});
+document.addEventListener('fullscreenchange', updateFullscreenLabel);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && globeView.classList.contains('is-expanded') && !globeView.querySelector('dialog[open]')) {
+    void leaveFullscreen();
+  }
+});
+
 function showGlobe() {
+  if (document.fullscreenElement === globeView || globeView.classList.contains('is-expanded')) return;
   const stage = globeCanvas.parentElement!;
   const { top, bottom } = stage.getBoundingClientRect();
   if (top < 0 || bottom > window.innerHeight) {
@@ -352,6 +393,7 @@ function renderRoute(moveFocus = false, animate = false) {
 
   if (changed) {
     currentDetail = nextDetail;
+    if (nextDetail && globeView.classList.contains('is-expanded')) void leaveFullscreen();
     map?.hide();
     map = undefined;
     detail.replaceChildren();
@@ -420,6 +462,7 @@ async function openAtlasLink(anchor: HTMLAnchorElement) {
   }
 
   if (before && target) returnCamera = before;
+  await leaveFullscreen();
   history.pushState(null, '', anchor.href);
   departure?.cancel();
   departure = undefined;

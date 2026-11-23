@@ -4,5 +4,17 @@
     "deploymentEnabled": {
       "atlas-redesign": false
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/atlas",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/atlas/",
+      "destination": "/",
+      "permanent": true
+    }
+  ]
 }

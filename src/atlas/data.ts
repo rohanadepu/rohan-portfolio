@@ -1,11 +1,18 @@
 export type Coordinates = [latitude: number, longitude: number];
 
+export interface SourceLink {
+  label: string;
+  url: string;
+}
+
 export interface Visit {
   year: number;
   date: string;
   activity: string;
   note: string;
-  photo?: { src: string; alt: string; caption: string };
+  photo?: { src: string; alt: string; caption: string; width?: number; height?: number };
+  evidence?: string;
+  sources?: SourceLink[];
 }
 
 export interface Place {
@@ -33,8 +40,12 @@ export interface Journey {
   id: string;
   name: string;
   year: number;
-  mode: 'flight' | 'drive';
+  mode: 'flight' | 'drive' | 'rail' | 'cruise';
   stops: Stop[];
+  date?: string;
+  evidence?: string;
+  note?: string;
+  sources?: SourceLink[];
 }
 
 export const cities: City[] = [

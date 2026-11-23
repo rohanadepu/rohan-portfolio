@@ -243,6 +243,7 @@ export function setupGlobe(
     markerLocation: (anchor: HTMLAnchorElement) => markers.find(({ element }) => element === anchor)?.pin.coordinates,
     setContent(items: GlobePin[], arcs: Arc[], roadPaths: Coordinates[][]) {
       routes = roadPaths;
+      pins.toggleAttribute('data-dense', items.length > 8);
       markers = items.map(pin => {
         const element = document.createElement('a');
         element.className = 'globe-pin';

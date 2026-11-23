@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f5ef">
-  <meta name="description" content="Rohan Adepu — software engineer focused on AI and data systems. Experience, projects, and interests.">
+  <meta name="description" content="Rohan Adepu — software engineer focused on AI and data systems. Travel atlas, experience, and selected projects.">
   <title>Rohan Adepu</title>
   <script src="/theme.js"></script>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%2325231e'/%3E%3Cpath d='M13 46V18h14c8 0 12 4 12 11 0 5-3 9-8 10l10 7H30l-10-8v8zm8-16h7c2 0 3-1 3-3s-1-3-3-3h-7z' fill='%23e6e7e7'/%3E%3Ccircle cx='49' cy='42' r='5' fill='%23fffaf2'/%3E%3C/svg%3E">
@@ -12,11 +12,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/src/style.css">
+  <link rel="stylesheet" href="/src/atlas/atlas.css">
 </head>
 <body>
   <div class="shell">
-    <header class="masthead">
-      <a class="wordmark" href="/">Rohan Adepu</a>
+    <header class="masthead" id="top">
+      <a class="wordmark" href="#top">Rohan Adepu</a>
+      <nav class="navigation" aria-label="Site sections">
+        <a href="#atlas">Atlas</a>
+        <a href="#about">About</a>
+        <a href="#projects">Projects</a>
+        <a href="#interests">Interests</a>
+      </nav>
       <div class="masthead-tools">
         <div class="status" aria-label="Rohan's daily rhythm, based on Mountain Time">
           <span class="status-icon" aria-hidden="true">✦</span><span id="status-text">Finding a good idea</span><span class="status-time">MT</span>
@@ -26,20 +33,64 @@
         </button>
       </div>
     </header>
-    <nav class="navigation" aria-label="Site sections">
-      <div class="tabs" role="tablist" aria-label="Portfolio">
-      <button class="tab" type="button" role="tab" id="tab-about" aria-controls="panel-about" aria-selected="true" tabindex="0">About</button>
-      <button class="tab" type="button" role="tab" id="tab-projects" aria-controls="panel-projects" aria-selected="false" tabindex="-1">Projects</button>
-      <button class="tab" type="button" role="tab" id="tab-interests" aria-controls="panel-interests" aria-selected="false" tabindex="-1">Interests</button>
-      </div>
-      <a class="nav-atlas" href="/atlas/">Atlas</a>
-    </nav>
     <main>
-      <section class="panel" id="panel-about" role="tabpanel" aria-labelledby="tab-about" tabindex="0">
-        <section class="intro">
-          <div class="intro-copy">
-            <p class="eyebrow">Software engineer · AI &amp; data systems</p>
-            <h1>Rohan<br><em>Adepu.</em></h1>
+      <section id="atlas" aria-label="Travel atlas">
+        <div id="overview">
+          <header class="atlas-intro">
+            <h1 id="atlas-title" tabindex="-1">Travel <em>Atlas.</em></h1>
+            <p>Places I’ve visited and how I got there.</p>
+          </header>
+          <div class="atlas-toolbar">
+            <div class="view-switch" role="group" aria-label="Globe view">
+              <button type="button" id="places-mode" aria-pressed="true">Places</button>
+              <button type="button" id="journeys-mode" aria-pressed="false">Journeys</button>
+            </div>
+            <label class="year-filter">Year <select id="year-filter" aria-label="Filter by year"><option value="">All years</option></select></label>
+          </div>
+          <div class="atlas-layout">
+            <section class="globe-panel" aria-label="Interactive globe">
+              <div class="globe-view" id="globe-view">
+                <div class="globe-stage">
+                  <canvas id="globe" aria-label="Globe. Use arrow keys to rotate and plus or minus to zoom." tabindex="0"></canvas>
+                  <canvas id="roads" aria-hidden="true"></canvas>
+                  <div id="globe-pins"></div>
+                </div>
+                <div class="globe-actions" role="group" aria-label="Globe zoom">
+                  <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+                  <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+                  <button id="reset" type="button">Reset</button>
+                </div>
+                <p class="eyebrow globe-help">Drag to turn · Pinch or scroll to zoom</p>
+              </div>
+              <p class="unavailable" id="globe-fallback" hidden>The globe is unavailable on this device. Browse the list to explore the atlas.</p>
+            </section>
+            <aside class="atlas-index" aria-label="Atlas index">
+              <p id="journal-label" class="eyebrow sample-label">Sample travel entries</p>
+              <h2 id="index-title">Places</h2>
+              <div id="places-filter">
+                <label class="visually-hidden" for="place-search">Search places or activities</label>
+                <input id="place-search" type="search" placeholder="Search places or activities">
+              </div>
+              <div id="journeys-filter" hidden>
+                <label class="visually-hidden" for="transport">Travel mode</label>
+                <select id="transport"><option value="">All travel modes</option><option value="flight">Flights</option><option value="drive">Road trips</option></select>
+              </div>
+              <div class="atlas-results">
+                <div id="atlas-list" aria-live="polite"></div>
+                <div id="journal-extras"></div>
+              </div>
+            </aside>
+          </div>
+        </div>
+        <div id="detail" hidden></div>
+      </section>
+
+      <section class="portfolio-section" id="about" aria-labelledby="about-title">
+        <h2 id="about-title">About me</h2>
+        <div class="about-snippet">
+          <img class="portrait" src="/portrait.jpg" alt="Rohan Adepu" loading="lazy" width="144" height="144">
+          <div>
+            <p>I’m Rohan, a software engineer focused on AI and data systems. I built tools at Goldman Sachs that let HR leaders ask questions about workforce data in plain English, and worked on developer tools at Empower. I studied computer science at CU Boulder.</p>
             <div class="socials" aria-label="Connect with Rohan">
               <a href="https://github.com/rohanadepu">GitHub</a>
               <a href="https://www.linkedin.com/in/rohan-adepu">LinkedIn</a>
@@ -47,61 +98,34 @@
               <a href="mailto:adepurohan@gmail.com">Email</a>
             </div>
           </div>
-          <figure class="portrait-wrap">
-            <img class="portrait" src="/portrait.jpg" alt="Rohan Adepu">
-          </figure>
-        </section>
-        <div class="about-grid">
-          <div>
-            <div class="bio">
-              <h2>About me</h2>
-              <p>I'm <strong>Rohan Adepu</strong>, a software engineer interested in AI and data. Most recently, I built tools at <strong>Goldman Sachs</strong> that help HCM leaders explore workforce data in natural language. Before that, I worked on developer tools at <strong>Empower</strong>. I studied computer science at the University of Colorado Boulder and researched federated learning with a team at the University of Missouri. Outside work, you'll usually find me at the gym, outdoors, or planning my next trip.</p>
-            </div>
-          </div>
-          <aside aria-label="Journey">
-            <p class="journey-label">Journey</p>
-            <div class="journey">
-              <div class="journey-item"><span class="journey-year">2026</span><span><span class="journey-title">Software Engineering Intern</span><span class="journey-place">Goldman Sachs</span><span class="journey-detail">HCM data and AI tools</span></span></div>
-              <div class="journey-item"><span class="journey-year">2025</span><span><span class="journey-title">Software Engineering Intern</span><span class="journey-place">Empower</span><span class="journey-detail">Developer tools</span></span></div>
-              <div class="journey-item"><span class="journey-year">2024</span><span><span class="journey-title">AI &amp; Cybersecurity Researcher</span><span class="journey-place">University of Missouri</span><span class="journey-detail">Federated learning</span></span></div>
-              <div class="journey-item"><span class="journey-year">2026</span><span><span class="journey-title">Computer Science</span><span class="journey-place">University of Colorado Boulder</span><span class="journey-detail">Bachelor of Science</span></span></div>
-            </div>
-          </aside>
-        </div>
-        <a class="atlas-callout" href="/atlas/">
-          <div><span class="eyebrow">Travel</span><strong>Travel Atlas</strong><span>Explore places, journeys, and field journals.</span></div>
-          <span class="callout-action">Open atlas</span>
-        </a>
-      </section>
-      <section class="panel text-panel" id="panel-projects" role="tabpanel" aria-labelledby="tab-projects" tabindex="0" hidden>
-        <h2>Projects</h2>
-        <div class="projects">
-          <article class="project"><div class="project-top"><h3>FinStack</h3></div><p>A self-hosted personal finance app that brings accounts, spending, budgets, and recurring charges into one dashboard, with an assistant for asking questions about your money.</p><div class="chips"><span class="chip">Next.js</span><span class="chip">TypeScript</span><span class="chip">SQLite</span></div><a class="project-link" href="https://github.com/rohanadepu/-Personal-Finance-Data-Aggregator-Insights-Platform" target="_blank" rel="noopener noreferrer" aria-label="View FinStack on GitHub">View on GitHub</a></article>
-          <article class="project"><div class="project-top"><h3>Real-Time Event Streaming</h3></div><p>An event pipeline for live KPIs and anomaly detection, with stream processing, a low-latency API, and monitoring built into the system.</p><div class="chips"><span class="chip">Kafka</span><span class="chip">Flink</span><span class="chip">FastAPI</span><span class="chip">Redis</span></div><a class="project-link" href="https://github.com/rohanadepu/Real-Time-Event-Streaming-Analytics-Platform" target="_blank" rel="noopener noreferrer" aria-label="View Real-Time Event Streaming on GitHub">View on GitHub</a></article>
-          <article class="project"><div class="project-top"><h3>FLVision</h3></div><p>Team research on hierarchical federated learning and GAN-based network intrusion detection for private and IoT networks.</p><div class="chips"><span class="chip">Federated learning</span><span class="chip">Python</span><span class="chip">Cybersecurity</span></div><a class="project-link" href="https://github.com/rohanadepu/FLVision" target="_blank" rel="noopener noreferrer" aria-label="View FLVision on GitHub">View on GitHub</a></article>
         </div>
       </section>
-      <section class="panel text-panel" id="panel-interests" role="tabpanel" aria-labelledby="tab-interests" tabindex="0" hidden>
-        <h2>Interests</h2><p class="section-subtitle">What I'm into outside work</p>
-        <div class="interests-grid">
-          <div class="focus-card">
-            <div class="interest-heading"><h3>Fitness</h3></div>
-            <p>Getting stronger, one suspiciously heavy grocery bag at a time.</p>
-            <div class="focus-now"><b>now</b><span>Definitely not skipping leg day.</span></div>
-          </div>
-          <div>
-            <p class="also">Also into</p>
-            <div class="interest-list">
-              <div class="interest-row"><div><h4>Traveling</h4><p>15+ countries so far · Thailand, Guatemala &amp; Australia next</p><a href="/atlas/">Open the Travel Atlas</a></div></div>
-              <div class="interest-row"><div><h4>Reading</h4><p>Currently reading <cite>Designing Data-Intensive Applications</cite></p></div></div>
-              <div class="interest-row"><div><h4>Cars &amp; computers</h4><p>I like building both.</p></div></div>
-            </div>
-          </div>
+
+      <section class="portfolio-section" id="projects" aria-labelledby="projects-title">
+        <h2 id="projects-title">Projects</h2>
+        <div class="project-list">
+          <article class="project">
+            <h3><a href="https://github.com/rohanadepu/-Personal-Finance-Data-Aggregator-Insights-Platform">FinStack</a></h3>
+            <p>A self-hosted dashboard for accounts, spending, and budgets.</p>
+          </article>
+          <article class="project">
+            <h3><a href="https://github.com/rohanadepu/Real-Time-Event-Streaming-Analytics-Platform">Real-Time Event Streaming</a></h3>
+            <p>A Kafka and Flink pipeline for live metrics and anomaly detection.</p>
+          </article>
+          <article class="project">
+            <h3><a href="https://github.com/rohanadepu/FLVision">FLVision</a></h3>
+            <p>Research on federated learning for intrusion detection across private networks.</p>
+          </article>
         </div>
+      </section>
+
+      <section class="portfolio-section" id="interests" aria-labelledby="interests-title">
+        <h2 id="interests-title">Interests</h2>
+        <p>Outside work, I lift, get outdoors, and work on cars.</p>
       </section>
     </main>
-    <footer><span>Rohan Adepu</span><a href="/atlas/">Travel Atlas</a></footer>
+    <footer><span>Rohan Adepu</span><a href="#top">Back to top</a></footer>
   </div>
-  <script type="module" src="/src/main.ts"></script>
+  <script type="module" src="/src/atlas/index.ts"></script>
 </body>
 </html>

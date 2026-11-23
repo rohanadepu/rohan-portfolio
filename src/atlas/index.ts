@@ -1,6 +1,7 @@
 import '../status';
 import type { Arc } from 'cobe';
-import { cities, journeys, coordinateLabel, type City, type Coordinates, type Journey } from './data';
+import { cities as sampleCities, journeys as sampleJourneys, coordinateLabel, type City, type Coordinates, type Journey, type SourceLink } from './data';
+import { loadPrivateJournal } from './journal';
 import { reducedMotion, setupGlobe, type GlobeCamera } from './globe';
 import type { mountMap } from './map';
 
@@ -21,6 +22,11 @@ function link(url: string, label: string, className = '') {
   return element;
 }
 
+if (location.pathname === '/atlas/' || location.pathname === '/atlas') {
+  history.replaceState(null, '', `/${location.search}${location.hash}`);
+}
+
+const atlas = byId('atlas');
 const overview = byId('overview');
 const detail = byId('detail');
 const list = byId('atlas-list');
@@ -38,11 +44,11 @@ if (!globe) {
   byId('globe-fallback').hidden = false;
 }
 
-const availableYears = new Set([
-  ...cities.flatMap(city => city.places.flatMap(place => place.visits.map(visit => visit.year))),
-  ...journeys.map(journey => journey.year),
-]);
-[...availableYears].sort((a, b) => b - a).forEach(value => year.add(new Option(String(value), String(value))));
+let cities = sampleCities;
+let journeys = sampleJourneys;
+let privateJournal: Awaited<ReturnType<typeof loadPrivateJournal>>;
+const availableYears = new Set<number>();
+const journeyMode = { flight: 'Flight', drive: 'Road trip', rail: 'Train', cruise: 'Cruise' };
 
 let mode: 'places' | 'journeys' = 'places';
 let currentDetail = '';
@@ -50,6 +56,7 @@ let map: ReturnType<typeof mountMap> | undefined;
 let selectedPlace = '';
 let returnCamera: GlobeCamera | undefined;
 let departure: Animation | undefined;
+let renderedSearch = location.search;
 
 function showGlobe() {
   const stage = globeCanvas.parentElement!;
@@ -81,7 +88,7 @@ function atlasUrl(values: Record<string, string> = {}) {
     else params.delete(key);
   });
   const query = params.toString();
-  return query ? `/atlas/?${query}` : '/atlas/';
+  return query ? `/?${query}` : '/';
 }
 
 function cityLink(id: string, place = '') {
@@ -109,6 +116,50 @@ function addListItem(title: string, subtitle: string, href: string, location: Co
   }
   article.append(...children);
   list.append(article);
+}
+
+function sourceLinks(sources: SourceLink[]) {
+  const group = node('ul', 'journal-sources');
+  for (const source of sources) {
+    const item = node('li');
+    const anchor = link(source.url, source.label);
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    item.append(anchor);
+    group.append(item);
+  }
+  return group;
+}
+
+function renderJournalExtras() {
+  const extras = byId('journal-extras');
+  extras.replaceChildren();
+  if (!privateJournal || (mode === 'journeys' && transport.value && transport.value !== 'flight')) return;
+  const isPlaces = mode === 'places';
+  const groups = isPlaces
+    ? [
+      { name: 'Photo collections', records: privateJournal.photoCollections },
+      { name: 'Places to match', records: privateJournal.placeNotes },
+    ]
+    : [{ name: 'Upcoming and incomplete flights', records: privateJournal.flightNotes }];
+  const query = isPlaces ? search.value.trim().toLowerCase() : '';
+  for (const { name, records } of groups) {
+    const matching = records.filter(record => (!year.value || String(record.year) === year.value) &&
+      [record.name, record.note].join(' ').toLowerCase().includes(query));
+    if (!matching.length) continue;
+    const section = node('details', 'journal-extras');
+    section.open = !list.childElementCount;
+    section.append(node('summary', '', `${name} (${matching.length})`));
+    for (const record of matching) {
+      const entry = node('article', 'index-entry');
+      entry.append(node('h3', '', record.name), node('p', 'index-meta', record.description));
+      if (record.note) entry.append(node('p', '', record.note));
+      if (record.sources.length) entry.append(sourceLinks(record.sources));
+      section.append(entry);
+    }
+    extras.append(section);
+  }
+  return Boolean(extras.childElementCount);
 }
 
 function renderOverview() {
@@ -143,34 +194,33 @@ function renderOverview() {
       (!transport.value || journey.mode === transport.value),
     );
     const arcs: Arc[] = [];
-    const roads: Coordinates[][] = [];
+    const surfacePaths: Coordinates[][] = [];
     const pins = [];
     for (const journey of visibleJourneys) {
       const [first] = journey.stops;
       const last = journey.stops.at(-1)!;
-      addListItem(journey.name, `${journey.mode === 'flight' ? 'Flight' : 'Road trip'} · ${journey.year}`,
+      addListItem(journey.name, [journeyMode[journey.mode], journey.date ?? journey.year, journey.evidence].filter(Boolean).join(' · '),
         journeyLink(journey.id), first.coordinates);
-      pins.push(
-        { name: first.name, href: journeyLink(journey.id), coordinates: first.coordinates },
-        { name: last.name, href: journeyLink(journey.id), coordinates: last.coordinates },
-      );
+      pins.push({ name: first.name, href: journeyLink(journey.id), coordinates: first.coordinates });
+      if (first !== last) pins.push({ name: last.name, href: journeyLink(journey.id), coordinates: last.coordinates });
       if (journey.mode === 'flight') {
         journey.stops.slice(1).forEach((stop, index) => arcs.push({
           from: journey.stops[index].coordinates, to: stop.coordinates,
         }));
-      } else {
-        roads.push(journey.stops.map(stop => stop.coordinates));
+      } else if (journey.stops.length > 1) {
+        surfacePaths.push(journey.stops.map(stop => stop.coordinates));
       }
     }
-    globe?.setContent(pins, arcs, roads);
-    if (visibleJourneys.length) {
+    globe?.setContent(pins, arcs, surfacePaths);
+    if (arcs.length || surfacePaths.length) {
       const legend = node('p', 'legend');
       if (arcs.length) legend.append(node('span', 'legend-flight', 'Flight'));
-      if (roads.length) legend.append(node('span', 'legend-road', 'Approximate drive'));
+      if (surfacePaths.length) legend.append(node('span', 'legend-road', 'Approximate route between stops'));
       list.append(legend);
     }
   }
-  if (!list.childElementCount) list.append(node('p', 'no-results', 'No entries match these filters.'));
+  const hasJournalExtras = renderJournalExtras();
+  if (!list.childElementCount && !hasJournalExtras) list.append(node('p', 'no-results', 'No entries match these filters.'));
 }
 
 function detailHeading(label: string, title: string, metadata: string) {
@@ -210,12 +260,12 @@ function updatePlaceSelection(center: boolean, scroll: boolean, smooth = false) 
   if (scroll) scrollToEntry(entries[index], smooth);
 }
 
-function scrollToEntry(entry: HTMLElement | undefined, smooth = true) {
+function scrollToEntry(entry: Element | undefined, smooth = true) {
   entry?.scrollIntoView({ block: 'nearest', behavior: smooth && !reducedMotion.matches ? 'smooth' : 'instant' });
 }
 
 function showCity(city: City) {
-  detail.append(detailHeading('Field journal · Sample entry', city.name, `${city.region} · ${coordinateLabel(city.coordinates)}`));
+  detail.append(detailHeading(privateJournal ? 'Field journal' : 'Field journal · Sample entry', city.name, `${city.region} · ${coordinateLabel(city.coordinates)}`));
   const mapContainer = node('div', 'detail-map');
   detail.append(mapContainer);
   const entries = node('div', 'field-entries');
@@ -234,14 +284,16 @@ function showCity(city: City) {
     entry.append(heading);
     for (const visit of place.visits.filter(visit => !year.value || String(visit.year) === year.value)) {
       const note = node('div', 'visit');
-      note.append(node('p', 'eyebrow', visit.date), node('h3', '', visit.activity), node('p', '', visit.note));
+      note.append(node('p', 'eyebrow', [visit.date, visit.evidence].filter(Boolean).join(' · ')),
+        node('h3', '', visit.activity), node('p', '', visit.note));
+      if (visit.sources?.length) note.append(sourceLinks(visit.sources));
       if (visit.photo) {
         const figure = node('figure', 'journal-photo');
         const image = node('img');
         image.src = visit.photo.src;
         image.alt = visit.photo.alt;
-        image.width = 1050;
-        image.height = 700;
+        image.width = visit.photo.width ?? 1050;
+        image.height = visit.photo.height ?? 700;
         image.loading = 'lazy';
         const photoLink = link(visit.photo.src, '');
         photoLink.setAttribute('aria-label', `View larger image of ${place.name}`);
@@ -260,6 +312,7 @@ function showCity(city: City) {
     if (!place) return;
     selectedPlace = place.id;
     history.replaceState(null, '', cityLink(city.id, place.id));
+    renderedSearch = location.search;
     updatePlaceSelection(true, scroll, true);
   }
   if (!visiblePlaces.length) {
@@ -272,13 +325,17 @@ function showCity(city: City) {
 }
 
 function showJourney(journey: Journey) {
-  const isDrive = journey.mode === 'drive';
-  detail.append(detailHeading('Itinerary · Sample journey', journey.name, `${isDrive ? 'Road trip' : 'Flight'} · ${journey.year}`));
-  if (isDrive) {
+  detail.append(detailHeading(privateJournal ? 'Itinerary' : 'Itinerary · Sample journey', journey.name,
+    [journeyMode[journey.mode], journey.date ?? journey.year, journey.evidence].filter(Boolean).join(' · ')));
+  if (journey.note) detail.append(node('p', '', journey.note));
+  if (journey.sources?.length) detail.append(sourceLinks(journey.sources));
+  if (journey.mode !== 'flight') {
     const container = node('div', 'detail-map');
-    detail.append(container, node('p', 'eyebrow map-caption', 'Approximate line between stops'));
-    void attachMap(container, journey.stops, journey.stops.map(stop => stop.coordinates),
-      index => scrollToEntry(detail.querySelectorAll('li')[index]),
+    const path = journey.stops.length > 1 ? journey.stops.map(stop => stop.coordinates) : null;
+    detail.append(container);
+    if (path) detail.append(node('p', 'eyebrow map-caption', 'Approximate line between stops'));
+    void attachMap(container, journey.stops, path,
+      index => scrollToEntry(detail.querySelectorAll('.itinerary > li')[index]),
     );
   }
   const stops = node('ol', 'itinerary');
@@ -298,7 +355,8 @@ function readDestination(params: URLSearchParams) {
 }
 
 function renderRoute(moveFocus = false, animate = false) {
-  const params = new URLSearchParams(location.search);
+  renderedSearch = location.search;
+  const params = new URLSearchParams(renderedSearch);
   mode = params.get('view') === 'journeys' ? 'journeys' : 'places';
   const selectedYear = params.get('year') ?? '';
   year.value = availableYears.has(Number(selectedYear)) ? selectedYear : '';
@@ -318,19 +376,19 @@ function renderRoute(moveFocus = false, animate = false) {
     if (city) showCity(city);
     else if (journey) showJourney(journey);
     if (moveFocus) {
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, behavior: 'instant' });
       (nextDetail ? detail.querySelector('h1') : byId('atlas-title'))?.focus({ preventScroll: true });
     }
   }
   if (nextDetail) {
-    updatePlaceSelection(false, Boolean(selectedPlace) && !animateChange);
+    updatePlaceSelection(false, Boolean(selectedPlace) && !animateChange && !location.hash);
     if (animateChange) {
       const sections = [...detail.children];
       const entered = sections.map((section, index) => reveal(section, 120 * index));
       if (selectedPlace) {
         const destination = selectedPlace;
         void entered.at(-1)?.finished.then(() => {
-          if (currentDetail === nextDetail && selectedPlace === destination) {
+          if (currentDetail === nextDetail && selectedPlace === destination && !location.hash) {
             updatePlaceSelection(false, true, true);
           }
         }).catch(() => {});
@@ -362,7 +420,7 @@ async function openAtlasLink(anchor: HTMLAnchorElement) {
   const fromOverview = !overview.hidden;
   const before = fromOverview ? globe?.camera() : undefined;
   if (globe && fromOverview && target) {
-    if (city || journey?.mode === 'drive') void import('./map').catch(() => {});
+    if (city || (journey && journey.mode !== 'flight')) void import('./map').catch(() => {});
     showGlobe();
     if (!(await globe.focus(target, true))) return;
   }
@@ -404,13 +462,38 @@ document.addEventListener('click', event => {
   const anchor = event.target instanceof Element ? event.target.closest('a') : null;
   if (!anchor || event.defaultPrevented || event.button || event.ctrlKey || event.metaKey ||
       event.shiftKey || event.altKey || anchor.target || anchor.origin !== location.origin ||
-      anchor.pathname !== '/atlas/') return;
+      anchor.pathname !== '/') return;
+  if (anchor.hash) {
+    interruptTransition();
+    return;
+  }
+  if (!atlas.contains(anchor)) return;
   event.preventDefault();
   void openAtlasLink(anchor);
 });
 window.addEventListener('popstate', () => {
   interruptTransition();
-  renderRoute(true, true);
+  if (location.search !== renderedSearch) renderRoute(!location.hash, true);
 });
 
-renderRoute();
+async function start() {
+  if (import.meta.env.DEV) privateJournal = await loadPrivateJournal();
+  if (privateJournal) {
+    cities = privateJournal.cities;
+    journeys = privateJournal.journeys;
+    if (journeys.some(journey => journey.mode === 'rail')) transport.add(new Option('Trains', 'rail'));
+    if (journeys.some(journey => journey.mode === 'cruise')) transport.add(new Option('Cruises', 'cruise'));
+    byId('journal-label').textContent = 'Private journal · Local preview';
+  }
+  const years = [
+    ...cities.flatMap(city => city.places.flatMap(place => place.visits.map(visit => visit.year))),
+    ...journeys.map(journey => journey.year),
+    ...(privateJournal?.photoCollections.map(collection => collection.year) ?? []),
+    ...(privateJournal?.flightNotes.map(flight => flight.year) ?? []),
+  ];
+  years.forEach(value => availableYears.add(value));
+  [...availableYears].sort((a, b) => b - a).forEach(value => year.add(new Option(String(value), String(value))));
+  renderRoute();
+}
+
+void start();

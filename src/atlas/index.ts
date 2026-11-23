@@ -1,4 +1,5 @@
-import { cities as sampleCities, journeys as sampleJourneys, coordinateLabel, type City, type Journey, type SourceLink } from './data';
+import type { Arc } from 'cobe';
+import { cities as sampleCities, journeys as sampleJourneys, coordinateLabel, type City, type Coordinates, type Journey, type SourceLink } from './data';
 import { loadPrivateJournal } from './journal';
 import { reducedMotion, setupGlobe, type GlobeCamera } from './globe';
 import type { mountMap } from './map';
@@ -34,7 +35,7 @@ const placesButton = byId<HTMLButtonElement>('places-mode');
 const journeysButton = byId<HTMLButtonElement>('journeys-mode');
 const globeView = byId('globe-view');
 const globeCanvas = byId<HTMLCanvasElement>('globe');
-const globe = setupGlobe(globeCanvas, byId('globe-pins'), {
+const globe = setupGlobe(globeCanvas, byId('surface-routes'), byId('globe-pins'), {
   zoomIn: byId('zoom-in'), zoomOut: byId('zoom-out'), reset: byId('reset'),
 });
 if (!globe) {
@@ -146,7 +147,20 @@ function renderOverview() {
     }));
 
   if (globe) {
-    globe.setContent(pins);
+    const flightArcs: Arc[] = [];
+    const surfaceRoutes: Coordinates[][] = [];
+    if (showingJourneys) {
+      for (const journey of journeys) {
+        const stops = journey.stops.map(stop => stop.coordinates);
+        if (stops.length < 2) continue;
+        if (journey.mode === 'flight') {
+          stops.slice(1).forEach((to, index) => flightArcs.push({ from: stops[index], to }));
+        } else {
+          surfaceRoutes.push(stops);
+        }
+      }
+    }
+    globe.setContent(pins, flightArcs, surfaceRoutes);
   } else {
     const links = new Map(pins.map(pin => [pin.href, pin.description ?? pin.name]));
     byId('globe-fallback-links').replaceChildren(...[...links].map(([href, title]) => {

@@ -14,12 +14,13 @@
 .atlas-layout { display: grid; align-items: start; margin-bottom: .75rem; }
 .globe-panel { min-width: 0; padding: 0 0 1rem; }
 .globe-view { position: relative; }
-.globe-stage { height: max(17rem, min(100vw, calc(100svh - 8rem))); position: relative; overflow: hidden; }
+.globe-stage { height: max(17rem, min(100vw, calc(100svh - 8rem))); position: relative; overflow: hidden; touch-action: pan-y; }
 .globe-stage { width: 100vw; margin-inline: calc(50% - 50vw); }
 .globe-stage canvas, #globe-pins { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
-#globe { touch-action: none; cursor: grab; }
+#globe { cursor: grab; }
 #globe.dragging { cursor: grabbing; }
 #globe:focus-visible { outline-offset: -3px; }
+#surface-routes { pointer-events: none; }
 #globe-pins { pointer-events: none; clip-path: circle(var(--pin-horizon, 0px)); }
 .globe-pin {
   position: absolute;
@@ -154,9 +155,6 @@
 @media (max-width: 770px) {
   .field-entry { grid-template-columns: 1fr; }
   .visit { grid-column: auto; }
-}
-@media (pointer: coarse) {
-  #globe { touch-action: pan-y; }
 }
 @media (max-width: 390px) {
   .view-switch button { padding-inline: .62rem; }

@@ -1,4 +1,4 @@
-import createGlobe, { type COBEOptions } from 'cobe';
+import createGlobe, { type Arc, type COBEOptions } from 'cobe';
 import type { Coordinates } from './data';
 
 import { setupPins, type GlobePin } from './pins';
@@ -13,18 +13,18 @@ export const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const ease = (progress: number) => progress * progress * (3 - 2 * progress);
 
-type GlobePalette = Pick<COBEOptions, 'dark' | 'mapBrightness' | 'baseColor' | 'glowColor'>;
+type GlobePalette = Pick<COBEOptions, 'dark' | 'mapBrightness' | 'baseColor' | 'glowColor' | 'arcColor'>;
 const lightGlobe: GlobePalette = {
   dark: 0, mapBrightness: 5.6,
-  baseColor: [0.98, 0.97, 0.945], glowColor: [0.44, 0.43, 0.4],
+  baseColor: [0.98, 0.97, 0.945], glowColor: [0.44, 0.43, 0.4], arcColor: [0.25, 0.24, 0.21],
 };
 const darkGlobe: GlobePalette = {
   dark: 1, mapBrightness: 3.4,
-  baseColor: [0.62, 0.60, 0.55], glowColor: [0.08, 0.08, 0.07],
+  baseColor: [0.62, 0.60, 0.55], glowColor: [0.08, 0.08, 0.07], arcColor: [0.77, 0.74, 0.67],
 };
 
 export function setupGlobe(
-  canvas: HTMLCanvasElement, pins: HTMLElement,
+  canvas: HTMLCanvasElement, surfaceCanvas: HTMLCanvasElement, pins: HTMLElement,
   controls: { zoomIn: HTMLButtonElement; zoomOut: HTMLButtonElement; reset: HTMLButtonElement },
 ) {
   const dpr = Math.min(window.devicePixelRatio, 2);
@@ -38,8 +38,12 @@ export function setupGlobe(
   const globe = createGlobe(canvas, {
     width, height, phi, theta, scale, devicePixelRatio: dpr,
     diffuse: 1.4, mapSamples: 18000, markerColor: [0.14, 0.13, 0.11], markerElevation: 0,
-    context, ...palette(),
+    arcHeight: 0.22, arcWidth: 0.5, context, ...palette(),
   });
+  const surfaceContext = surfaceCanvas.getContext('2d');
+  const readRouteColor = () => getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+  let routeColor = readRouteColor();
+  let surfaceRoutes: Coordinates[][] = [];
   const pinLayer = setupPins(pins, canvas, (coordinates, zoomLevel) => {
     void moveTo(cameraAt(coordinates, zoomLevel + .04), 680, true);
   });
@@ -68,6 +72,25 @@ export function setupGlobe(
     // COBE measures the sphere against canvas height. Fit it to the shorter edge.
     globe.update({ phi, theta, scale: scale * Math.min(1, width / height), ...overrides });
     pinLayer.render(position, width, height, scale, screenRadius() * scale);
+    if (!surfaceContext) return;
+    surfaceContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+    surfaceContext.clearRect(0, 0, width, height);
+    surfaceContext.strokeStyle = routeColor;
+    surfaceContext.lineWidth = 1.6;
+    surfaceContext.setLineDash([3, 4]);
+    surfaceContext.beginPath();
+    for (const route of surfaceRoutes) {
+      let connected = false;
+      for (const coordinates of route) {
+        const point = position(coordinates);
+        if (point.front) {
+          if (connected) surfaceContext.lineTo(point.x, point.y);
+          else surfaceContext.moveTo(point.x, point.y);
+        }
+        connected = point.front;
+      }
+    }
+    surfaceContext.stroke();
   }
 
   function requestPaint() {
@@ -176,16 +199,18 @@ export function setupGlobe(
       requestPaint();
     }
   });
-  canvas.addEventListener('lostpointercapture', event => {
+  function clearPointer(event: PointerEvent) {
     pointers.delete(event.pointerId);
     if (pointers.size === 0) canvas.classList.remove('dragging');
-  });
+  }
+  canvas.addEventListener('lostpointercapture', clearPointer);
+  canvas.addEventListener('pointercancel', clearPointer);
   canvas.addEventListener('wheel', event => {
-    if (event.ctrlKey || document.activeElement === canvas) {
-      event.preventDefault();
-      cancelMotion?.();
-      zoom(Math.exp(-clamp(event.deltaY, -100, 100) * 0.003), { x: event.clientX, y: event.clientY });
-    }
+    // Trackpad pinch is emitted as a control-modified wheel event.
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    cancelMotion?.();
+    zoom(Math.exp(-clamp(event.deltaY, -100, 100) * 0.003), { x: event.clientX, y: event.clientY });
   }, { passive: false });
   canvas.addEventListener('keydown', event => {
     const actions: Record<string, () => void> = {
@@ -218,10 +243,15 @@ export function setupGlobe(
     if (!nextWidth || !nextHeight || (width === nextWidth && height === nextHeight)) return;
     width = nextWidth;
     height = nextHeight;
+    surfaceCanvas.width = Math.round(width * dpr);
+    surfaceCanvas.height = Math.round(height * dpr);
     paint({ width, height });
   }).observe(canvas.parentElement!);
 
-  window.addEventListener('portfolio-themechange', () => paint(palette()));
+  window.addEventListener('portfolio-themechange', () => {
+    routeColor = readRouteColor();
+    paint(palette());
+  });
 
   // COBE decodes the land texture asynchronously and draws on the next update.
   window.setTimeout(requestPaint, 250);
@@ -232,9 +262,10 @@ export function setupGlobe(
     focus,
     stop: () => cancelMotion?.(),
     markerLocation: pinLayer.markerLocation,
-    setContent(items: GlobePin[]) {
+    setContent(items: GlobePin[], arcs: Arc[], routes: Coordinates[][]) {
       pinLayer.setContent(items);
-      paint();
+      surfaceRoutes = routes;
+      paint({ arcs });
     },
   };
 }

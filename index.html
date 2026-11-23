@@ -29,7 +29,6 @@
           </h1>
           <p class="intro-summary">I build software for AI and data systems. Here’s what I’ve made and where I’ve been.</p>
           <div class="intro-actions">
-            <a class="intro-primary" href="#atlas">Explore the Atlas</a>
             <a href="#projects">See projects</a>
           </div>
         </div>
@@ -52,6 +51,7 @@
               <div class="globe-view" id="globe-view">
                 <div class="globe-stage" id="globe-stage">
                   <canvas id="globe" aria-label="Globe. Use arrow keys to rotate and plus or minus to zoom." tabindex="0"></canvas>
+                  <canvas id="surface-routes" aria-hidden="true"></canvas>
                   <div id="globe-pins"></div>
                 </div>
                 <div class="globe-actions" role="group" aria-label="Globe controls">
@@ -59,7 +59,7 @@
                   <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
                   <button id="reset" type="button">Reset</button>
                 </div>
-                <p class="eyebrow globe-help">Drag to turn · Pinch or scroll to zoom</p>
+                <p class="eyebrow globe-help">Drag to turn · Pinch or use + / − to zoom</p>
                 <dialog id="cluster-choices" class="cluster-choices" aria-labelledby="cluster-title">
                   <form method="dialog"><button class="cluster-close" type="submit">Close</button></form>
                   <h2 id="cluster-title"></h2>

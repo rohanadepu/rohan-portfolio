@@ -184,15 +184,15 @@ export function setupGlobe(
         (height / 2 - 40) / Math.abs(point.y - height / 2));
     }
     if (fit < 0.75 || nearest * fit <= pinDiameter) return false;
-    target.scale = Math.min(fit, Math.max(scale * zoomStep, pinDiameter * 1.75 / nearest, 0.75));
+    target.scale = Math.min(fit, Math.max(scale * 1.18, pinDiameter * 1.5 / nearest, 0.75));
     showGlobe();
-    void moveTo(target, 980, true);
+    void moveTo(target, 1350, true);
     return true;
   }
 
   function focus(coordinates: Coordinates) {
-    const zoomLevel = Math.min(maximumScale, Math.max(2.45, scale * 1.12));
-    return moveTo(cameraAt(coordinates, zoomLevel), 1400, true);
+    const zoomLevel = Math.min(maximumScale, Math.max(2, scale * 1.07));
+    return moveTo(cameraAt(coordinates, zoomLevel), 1700, true);
   }
 
   const pointers = new Map<number, { x: number; y: number }>();

@@ -1,4 +1,4 @@
-.detail-heading h1 {
+.detail-heading h2 {
   font: clamp(5rem, 11vw, 10.5rem)/.81 var(--serif);
   letter-spacing: -.045em;
 }
@@ -130,7 +130,7 @@ body.globe-expanded { overflow: hidden; }
 .legend .legend-road::before { border-top-style: dashed; }
 .detail-heading { padding: 1.25rem 0 1.65rem; }
 .back-link { display: inline-block; margin-bottom: clamp(1.5rem, 4vw, 3rem); font-size: .91rem; }
-.detail-heading h1 { margin: .2em 0 .12em; }
+.detail-heading h2 { margin: .2em 0 .12em; }
 .detail-meta { color: var(--quiet); font: .88rem/1.6 var(--mono); }
 .detail-map { position: relative; height: clamp(18rem, 40vw, 30rem); background: var(--tint); border: 1px solid var(--line); }
 .detail-map .maplibregl-canvas { filter: saturate(.13); }
@@ -165,14 +165,14 @@ body.globe-expanded { overflow: hidden; }
 .place-select:hover { text-decoration: underline; }
 .entry-number { font: .76rem var(--mono); color: var(--quiet); }
 .visit { grid-column: 2; }
-.visit h3 { font: 1.85rem var(--serif); margin: .2rem 0; }
+.visit h4 { font: 1.85rem var(--serif); margin: .2rem 0; }
 .visit > p:not(.eyebrow) { max-width: 58ch; }
 .journal-photo { margin-top: 1rem; max-width: 36rem; }
 .journal-photo img { height: auto; }
 .journal-photo figcaption { margin-top: .55rem; }
 .itinerary { padding-left: 1.5rem; max-width: 48rem; }
 .itinerary li { padding: 1.2rem 0; border-top: 1px solid var(--line); }
-.itinerary h2 { font: 2.35rem var(--serif); }
+.itinerary h3 { font: 2.35rem var(--serif); }
 .itinerary a { display: inline-block; margin-top: .5rem; }
 .no-results, .unavailable { color: var(--quiet); padding: 1.15rem; }
 .journal-sources {

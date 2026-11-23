@@ -22,7 +22,8 @@ function link(url: string, label: string, className = '') {
   return element;
 }
 
-if (location.pathname === '/atlas/' || location.pathname === '/atlas') {
+const legacyAtlasPath = /^\/atlas\/?$/.test(location.pathname);
+if (legacyAtlasPath) {
   history.replaceState(null, '', `/${location.search}${location.hash}`);
 }
 
@@ -116,6 +117,22 @@ function reveal(element: Element, delay = 0, duration = 480) {
     { opacity: 0, translate: '0 9px' },
     { opacity: 1, translate: '0 0' },
   ], { delay, duration, fill: 'backwards', easing: 'cubic-bezier(.22,.61,.36,1)' });
+}
+
+function revealGlobeOnScroll() {
+  if (!globe || reducedMotion.matches || !('IntersectionObserver' in window)) return;
+  const stage = byId('globe-stage');
+  const observer = new IntersectionObserver(([entry]) => {
+    if (!entry.isIntersecting || entry.intersectionRatio < .05) return;
+    observer.disconnect();
+    if (!reducedMotion.matches) {
+      stage.animate(
+        [{ opacity: .62, translate: '0 14px' }, { opacity: 1, translate: '0 0' }],
+        { duration: 640, easing: 'cubic-bezier(.22,.61,.36,1)' },
+      );
+    }
+  }, { rootMargin: `0px 0px -${Math.round(window.innerHeight * .4)}px 0px`, threshold: .05 });
+  observer.observe(stage);
 }
 
 function atlasUrl(values: Record<string, string> = {}) {
@@ -255,7 +272,7 @@ function renderOverview() {
 
 function detailHeading(label: string, title: string, metadata: string) {
   const group = node('header', 'detail-heading');
-  const heading = node('h1', '', title);
+  const heading = node('h2', '', title);
   heading.tabIndex = -1;
   group.append(
     link(atlasUrl(), 'Back to the atlas', 'back-link'),
@@ -302,7 +319,7 @@ function showCity(city: City) {
   for (const [index, place] of city.places.entries()) {
     const entry = node('article', 'field-entry');
     entry.id = place.id;
-    const heading = node('h2');
+    const heading = node('h3');
     const select = node('button', 'place-select');
     select.type = 'button';
     select.append(node('span', 'entry-number', String(index + 1).padStart(2, '0')), node('span', '', place.name));
@@ -312,7 +329,7 @@ function showCity(city: City) {
     for (const visit of place.visits) {
       const note = node('div', 'visit');
       note.append(node('p', 'eyebrow', [visit.date, visit.evidence].filter(Boolean).join(' · ')),
-        node('h3', '', visit.activity), node('p', '', visit.note));
+        node('h4', '', visit.activity), node('p', '', visit.note));
       if (visit.sources?.length) note.append(sourceLinks(visit.sources));
       if (visit.photo) {
         const figure = node('figure', 'journal-photo');
@@ -368,7 +385,7 @@ function showJourney(journey: Journey) {
   const stops = node('ol', 'itinerary');
   for (const stop of journey.stops) {
     const entry = node('li');
-    entry.append(node('h2', '', stop.name), node('p', 'eyebrow', coordinateLabel(stop.coordinates)));
+    entry.append(node('h3', '', stop.name), node('p', 'eyebrow', coordinateLabel(stop.coordinates)));
     if (stop.cityId) entry.append(link(cityLink(stop.cityId), 'Open field journal'));
     stops.append(entry);
   }
@@ -402,9 +419,9 @@ function renderRoute(moveFocus = false, animate = false) {
     if (city) showCity(city);
     else if (journey) showJourney(journey);
     if (moveFocus) {
-      window.scrollTo({ top: 0, behavior: 'instant' });
+      atlas.scrollIntoView({ block: 'start', behavior: 'instant' });
       const viewButton = mode === 'journeys' ? journeysButton : placesButton;
-      (nextDetail ? detail.querySelector('h1') : viewButton)?.focus({ preventScroll: true });
+      (nextDetail ? detail.querySelector('h2') : viewButton)?.focus({ preventScroll: true });
     }
   }
   if (nextDetail) {
@@ -503,7 +520,12 @@ async function start() {
     if (journeys.some(journey => journey.mode === 'cruise')) transport.add(new Option('Cruises', 'cruise'));
     byId('journal-label').textContent = 'Private journal · Local preview';
   }
-  renderRoute();
+  const params = new URLSearchParams(location.search);
+  const opensAtlas = !location.hash &&
+    (legacyAtlasPath || params.has('city') || params.has('journey') || params.get('view') === 'journeys');
+  renderRoute(opensAtlas);
+  if (opensAtlas && !currentDetail) atlas.scrollIntoView({ block: 'start', behavior: 'instant' });
+  revealGlobeOnScroll();
 }
 
 void start();

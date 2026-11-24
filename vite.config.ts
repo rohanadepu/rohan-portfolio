@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
-import { atlasPreview, type CuratedPhoto } from './src/atlas/journal';
+import { atlasPreview, type CuratedPhoto, type VisitRecord } from './src/atlas/journal';
 
 const journalDirectory = resolve(import.meta.dirname, 'atlas-data.local');
 const photoDirectory = resolve(import.meta.dirname, 'atlas-photos.local');
@@ -11,12 +11,20 @@ function isMissing(error: unknown) {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT';
 }
 
-async function readPhotoSelection(): Promise<CuratedPhoto[]> {
-  const contents = await readFile(resolve(photoDirectory, 'selection.json'), 'utf8').catch(error => {
+async function readLocalList<T>(filename: string): Promise<T[]> {
+  const contents = await readFile(resolve(photoDirectory, filename), 'utf8').catch(error => {
     if (isMissing(error)) return '[]';
     throw error;
   });
   return JSON.parse(contents);
+}
+
+async function readJournalPreview(selection: CuratedPhoto[]) {
+  const [contents, additionalVisits] = await Promise.all([
+    readFile(resolve(journalDirectory, 'journal.json'), 'utf8'),
+    readLocalList<VisitRecord>('visits.json'),
+  ]);
+  return JSON.stringify(atlasPreview(JSON.parse(contents), selection, additionalVisits));
 }
 
 export default defineConfig({
@@ -47,14 +55,14 @@ export default defineConfig({
           return;
         }
         try {
-          const selection = await readPhotoSelection();
+          const selection = await readLocalList<CuratedPhoto>('selection.json');
           if (photo && !selection.some(item => item.file === photo)) {
             response.writeHead(404).end();
             return;
           }
           const body = photo
             ? await readFile(resolve(photoDirectory, photo))
-            : JSON.stringify(atlasPreview(JSON.parse(await readFile(resolve(journalDirectory, 'journal.json'), 'utf8')), selection));
+            : await readJournalPreview(selection);
           response.writeHead(200, {
             'Content-Type': photo ? 'image/jpeg' : 'application/json; charset=utf-8',
             'Cache-Control': 'private, no-store',

@@ -1,6 +1,6 @@
 import type { AtlasPhoto, City, Coordinates, Journey, Stop } from './data';
 
-interface VisitRecord {
+export interface VisitRecord {
   cityId: string;
   city: string;
   region: string;
@@ -60,7 +60,7 @@ function visitKey({ cityId, placeId, startDate }: Pick<VisitRecord, 'cityId' | '
   return JSON.stringify([cityId, placeId, startDate]);
 }
 
-export function atlasPreview(journal: Journal, curatedPhotos: CuratedPhoto[] = []) {
+export function atlasPreview(journal: Journal, curatedPhotos: CuratedPhoto[] = [], additionalVisits: VisitRecord[] = []) {
   const photosByVisit = new Map<string, AtlasPhoto[]>();
   for (const selected of curatedPhotos) {
     const key = visitKey(selected);
@@ -71,7 +71,7 @@ export function atlasPreview(journal: Journal, curatedPhotos: CuratedPhoto[] = [
     else photosByVisit.set(key, [photo]);
   }
   const cities = new Map<string, City>();
-  for (const record of journal.visits) {
+  for (const record of [...journal.visits, ...additionalVisits]) {
     let city = cities.get(record.cityId);
     if (!city) {
       city = { id: record.cityId, name: record.city, region: record.region, coordinates: record.cityCoordinates, places: [] };

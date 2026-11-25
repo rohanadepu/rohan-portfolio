@@ -9,18 +9,17 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: .75rem 1rem;
-  padding-bottom: .95rem;
-  border-bottom: 1px solid var(--line);
+  padding-top: clamp(.9rem, 2.5svh, 1.5rem);
 }
 .atlas-toolbar h2 {
-  font: clamp(2.8rem, 4.5vw, 4.8rem)/.94 var(--serif);
+  font: clamp(2.35rem, 4.6vw, 4.15rem)/.96 var(--serif);
   letter-spacing: -.04em;
 }
 .view-switch { display: inline-flex; gap: .25rem; padding: .2rem; border: 1px solid var(--line); }
 .view-switch button { padding: .46rem .85rem; border: 0; background: transparent; font-weight: 600; font-size: .9rem; }
 .view-switch button[aria-pressed="true"] { color: var(--paper); background: var(--ink); }
 .globe-view { position: relative; }
-.globe-stage { height: clamp(24rem, 66svh, 38rem); position: relative; overflow: hidden; touch-action: pan-y; }
+.globe-stage { height: clamp(24rem, 63svh, 38rem); position: relative; overflow: hidden; touch-action: pan-y; }
 .globe-stage canvas, #globe-pins { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
 #globe { cursor: grab; }
 #globe.dragging { cursor: grabbing; }
@@ -92,7 +91,7 @@
   display: flex;
   gap: .2rem;
   top: 1.1rem;
-  left: 0;
+  right: 0;
 }
 .globe-actions button { min-width: 2.2rem; min-height: 2.2rem; padding: .2rem .45rem; border: 1px solid var(--line); background: var(--paper); }
 .globe-actions button:hover { background: var(--tint); }

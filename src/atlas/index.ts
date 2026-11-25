@@ -39,7 +39,7 @@ const journeysButton = byId<HTMLButtonElement>('journeys-mode');
 const globeView = byId('globe-view');
 const globeCanvas = byId<HTMLCanvasElement>('globe');
 const globe = setupGlobe(globeCanvas, byId('globe-overlay'), byId('globe-pins'), {
-  zoomIn: byId('zoom-in'), zoomOut: byId('zoom-out'), reset: byId('reset'), spin: byId('spin'),
+  zoomIn: byId('zoom-in'), zoomOut: byId('zoom-out'), reset: byId('reset'),
 }, showGlobe);
 if (!globe) {
   globeView.hidden = true;

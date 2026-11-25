@@ -8,7 +8,9 @@ const radians = Math.PI / 180;
 const maximumScale = 256;
 const zoomStep = 1.3;
 const radius = 0.8; // COBE's sphere radius in clip space.
-const idleDelay = 3400;
+const overviewScale = 1.05;
+const spinDelay = 5000;
+const zoomResetDelay = 15000;
 const idleSpeed = 2 * Math.PI / 120000;
 const initialView = { phi: -Math.PI / 2 - 125 * radians, theta: 25 * radians, scale: 1 };
 export type GlobeCamera = typeof initialView;
@@ -28,7 +30,7 @@ const darkGlobe: GlobePalette = {
 
 export function setupGlobe(
   canvas: HTMLCanvasElement, overlay: HTMLCanvasElement, pins: HTMLElement,
-  controls: { zoomIn: HTMLButtonElement; zoomOut: HTMLButtonElement; reset: HTMLButtonElement; spin: HTMLButtonElement },
+  controls: { zoomIn: HTMLButtonElement; zoomOut: HTMLButtonElement; reset: HTMLButtonElement },
   showGlobe: () => void,
 ) {
   const dpr = Math.min(window.devicePixelRatio, 2);
@@ -55,11 +57,11 @@ export function setupGlobe(
   let cancelMotion: (() => void) | undefined;
   let buttonZoom: { scale: number } | undefined;
   let land: Awaited<ReturnType<typeof loadLandMask>> | undefined;
-  let spinEnabled = !reducedMotion.matches;
   let inView = false;
-  let spinTimer = 0;
+  let idleTimer = 0;
   let spinFrame = 0;
   let lastSpin = 0;
+  let returningToOverview = false;
 
   function screenRadius() {
     return radius * Math.min(width, height) / 2;
@@ -120,15 +122,14 @@ export function setupGlobe(
     });
   }
 
-  function canSpin() {
-    return spinEnabled && inView && !document.hidden && scale <= 1.05 && !cancelMotion &&
-      !pointers.size && !dialog?.open && !stage.matches(':focus-within') &&
-      !pins.querySelector('.globe-pin:hover');
+  function canIdle() {
+    return !reducedMotion.matches && inView && !document.hidden && !cancelMotion &&
+      !pointers.size && !dialog?.open && !pins.querySelector('.globe-pin:focus-visible');
   }
 
   function spin(now: number) {
     spinFrame = 0;
-    if (!canSpin()) return;
+    if (!canIdle() || scale > overviewScale) return;
     const elapsed = now - lastSpin;
     if (elapsed >= 32) {
       phi = (phi - Math.min(elapsed, 80) * idleSpeed) % (2 * Math.PI);
@@ -138,20 +139,38 @@ export function setupGlobe(
     spinFrame = requestAnimationFrame(spin);
   }
 
-  function postponeSpin() {
-    clearTimeout(spinTimer);
+  function stopIdle() {
+    clearTimeout(idleTimer);
     cancelAnimationFrame(spinFrame);
     spinFrame = 0;
-    if (!canSpin()) return;
-    spinTimer = window.setTimeout(() => {
-      lastSpin = performance.now();
-      spinFrame = requestAnimationFrame(spin);
-    }, idleDelay);
   }
 
-  function updateSpinControl() {
-    controls.spin.textContent = spinEnabled ? 'Pause spin' : 'Resume spin';
-    postponeSpin();
+  function startSpin() {
+    stopIdle();
+    lastSpin = performance.now();
+    spinFrame = requestAnimationFrame(spin);
+  }
+
+  function queueIdle() {
+    stopIdle();
+    if (!canIdle()) return;
+    idleTimer = window.setTimeout(() => {
+      if (!canIdle()) return;
+      if (scale <= overviewScale) {
+        startSpin();
+        return;
+      }
+      returningToOverview = true;
+      void moveTo({ ...camera(), scale: 1 }, 1150).then(completed => {
+        returningToOverview = false;
+        if (completed && canIdle()) startSpin();
+      });
+    }, scale <= overviewScale ? spinDelay : zoomResetDelay);
+  }
+
+  function resumeAfterActivity() {
+    if (returningToOverview) cancelMotion?.();
+    queueIdle();
   }
 
   function zoom(factor: number, anchor?: { x: number; y: number }) {
@@ -177,7 +196,7 @@ export function setupGlobe(
 
   function moveTo(target: GlobeCamera, duration = 850, approach = false): Promise<boolean> {
     cancelMotion?.();
-    postponeSpin();
+    stopIdle();
     const start = camera();
     const rotation = Math.atan2(Math.sin(target.phi - start.phi), Math.cos(target.phi - start.phi));
     const tilt = target.theta - start.theta;
@@ -185,7 +204,7 @@ export function setupGlobe(
     if (reducedMotion.matches || Math.max(Math.abs(rotation), Math.abs(tilt), Math.abs(zoomDistance)) < 0.001) {
       ({ phi, theta, scale } = target);
       paint();
-      postponeSpin();
+      queueIdle();
       return Promise.resolve(true);
     }
 
@@ -209,7 +228,7 @@ export function setupGlobe(
           frame = requestAnimationFrame(step);
         } else {
           cancelMotion = undefined;
-          postponeSpin();
+          queueIdle();
           resolve(true);
         }
       }
@@ -261,7 +280,7 @@ export function setupGlobe(
     cancelMotion?.();
     canvas.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    postponeSpin();
+    queueIdle();
     canvas.classList.add('dragging');
   });
   canvas.addEventListener('pointermove', event => {
@@ -283,7 +302,7 @@ export function setupGlobe(
   function clearPointer(event: PointerEvent) {
     pointers.delete(event.pointerId);
     if (pointers.size === 0) canvas.classList.remove('dragging');
-    postponeSpin();
+    queueIdle();
   }
   canvas.addEventListener('lostpointercapture', clearPointer);
   canvas.addEventListener('pointercancel', clearPointer);
@@ -293,7 +312,7 @@ export function setupGlobe(
     event.preventDefault();
     cancelMotion?.();
     zoom(Math.exp(-clamp(event.deltaY, -100, 100) * 0.003), { x: event.clientX, y: event.clientY });
-    postponeSpin();
+    queueIdle();
   }, { passive: false });
   canvas.addEventListener('keydown', event => {
     const actions: Record<string, () => void> = {
@@ -308,7 +327,7 @@ export function setupGlobe(
     cancelMotion?.();
     actions[event.key]();
     requestPaint();
-    postponeSpin();
+    queueIdle();
   });
   function easeZoom(factor: number) {
     const zoom = { scale: clamp((buttonZoom?.scale ?? scale) * factor, 0.75, maximumScale) };
@@ -320,25 +339,16 @@ export function setupGlobe(
   controls.zoomIn.addEventListener('click', () => easeZoom(zoomStep));
   controls.zoomOut.addEventListener('click', () => easeZoom(1 / zoomStep));
   controls.reset.addEventListener('click', () => { void moveTo(initialView); });
-  controls.spin.addEventListener('click', () => {
-    spinEnabled = !spinEnabled;
-    updateSpinControl();
-  });
-  reducedMotion.addEventListener('change', () => {
-    if (reducedMotion.matches) spinEnabled = false;
-    updateSpinControl();
-  });
-  document.addEventListener('visibilitychange', postponeSpin);
-  stage.addEventListener('focusin', postponeSpin);
-  stage.addEventListener('focusout', () => window.queueMicrotask(postponeSpin));
-  pins.addEventListener('pointerover', postponeSpin);
-  pins.addEventListener('pointerout', () => window.queueMicrotask(postponeSpin));
-  dialog?.addEventListener('close', postponeSpin);
+  reducedMotion.addEventListener('change', resumeAfterActivity);
+  document.addEventListener('visibilitychange', resumeAfterActivity);
+  stage.addEventListener('pointermove', resumeAfterActivity);
+  stage.addEventListener('focusin', resumeAfterActivity);
+  stage.addEventListener('focusout', () => window.queueMicrotask(queueIdle));
+  dialog?.addEventListener('close', queueIdle);
   new IntersectionObserver(([entry]) => {
     inView = entry.intersectionRatio >= .25;
-    postponeSpin();
+    resumeAfterActivity();
   }, { threshold: .25 }).observe(stage);
-  updateSpinControl();
 
   new ResizeObserver(([entry]) => {
     const nextWidth = Math.round(entry.contentRect.width);
@@ -370,7 +380,7 @@ export function setupGlobe(
     focus,
     stop() {
       cancelMotion?.();
-      postponeSpin();
+      queueIdle();
     },
     markerLocation: pinLayer.markerLocation,
     setContent(items: GlobePin[], arcs: Arc[], routes: Coordinates[][]) {

@@ -15,6 +15,8 @@ The page is at `/`. Field journals use query links with a city ID, such as `/?ci
 
 The atlas loads OpenFreeMap street tiles when you open a city or a road trip. The journal entries remain usable with the map unavailable. The `atlas-redesign` branch is excluded from Vercel’s automatic deployments.
 
+The dotted globe uses a land mask derived from [Natural Earth 1:10m land polygons, version 5.1.2](https://github.com/nvkelso/natural-earth-vector/blob/v5.1.2/geojson/ne_10m_land.geojson).
+
 ## Publish atlas entries
 
 Add the cities, visits, and journeys you want to share to `src/atlas/public-data.ts`. To attach photos to a visit, copy the individual images you have selected into `public/atlas-images/` and list them in that visit’s `photos` array. Each photo uses a filename such as `city-overlook.jpg` and descriptive `alt` text. You can also include a caption and the image dimensions. Files in `public/` are served directly.

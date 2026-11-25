@@ -2,11 +2,14 @@ import createGlobe, { type Arc, type COBEOptions } from 'cobe';
 import type { Coordinates } from './data';
 
 import { pinDiameter, setupPins, type GlobePin } from './pins';
+import { loadLandMask, paintLand } from './land';
 
 const radians = Math.PI / 180;
 const maximumScale = 256;
 const zoomStep = 1.3;
 const radius = 0.8; // COBE's sphere radius in clip space.
+const idleDelay = 3400;
+const idleSpeed = 2 * Math.PI / 120000;
 const initialView = { phi: -Math.PI / 2 - 125 * radians, theta: 25 * radians, scale: 1 };
 export type GlobeCamera = typeof initialView;
 export const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -24,8 +27,8 @@ const darkGlobe: GlobePalette = {
 };
 
 export function setupGlobe(
-  canvas: HTMLCanvasElement, surfaceCanvas: HTMLCanvasElement, pins: HTMLElement,
-  controls: { zoomIn: HTMLButtonElement; zoomOut: HTMLButtonElement; reset: HTMLButtonElement },
+  canvas: HTMLCanvasElement, overlay: HTMLCanvasElement, pins: HTMLElement,
+  controls: { zoomIn: HTMLButtonElement; zoomOut: HTMLButtonElement; reset: HTMLButtonElement; spin: HTMLButtonElement },
   showGlobe: () => void,
 ) {
   const dpr = Math.min(window.devicePixelRatio, 2);
@@ -41,7 +44,9 @@ export function setupGlobe(
     diffuse: 1.4, mapSamples: 18000, markerColor: [0.14, 0.13, 0.11], markerElevation: 0,
     arcHeight: 0.22, arcWidth: 0.5, context, ...palette(),
   });
-  const surfaceContext = surfaceCanvas.getContext('2d');
+  const surfaceContext = overlay.getContext('2d');
+  const stage = canvas.parentElement!;
+  const dialog = stage.parentElement!.querySelector('dialog');
   const readRouteColor = () => getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
   let routeColor = readRouteColor();
   let surfaceRoutes: Coordinates[][] = [];
@@ -49,6 +54,12 @@ export function setupGlobe(
   let pendingFrame = 0;
   let cancelMotion: (() => void) | undefined;
   let buttonZoom: { scale: number } | undefined;
+  let land: Awaited<ReturnType<typeof loadLandMask>> | undefined;
+  let spinEnabled = !reducedMotion.matches;
+  let inView = false;
+  let spinTimer = 0;
+  let spinFrame = 0;
+  let lastSpin = 0;
 
   function screenRadius() {
     return radius * Math.min(width, height) / 2;
@@ -77,6 +88,12 @@ export function setupGlobe(
     if (!surfaceContext) return;
     surfaceContext.setTransform(dpr, 0, 0, dpr, 0, 0);
     surfaceContext.clearRect(0, 0, width, height);
+    if (land) {
+      surfaceContext.fillStyle = routeColor;
+      surfaceContext.globalAlpha = .78;
+      paintLand(surfaceContext, land, { width, height, radius: screenRadius() * scale, scale, phi, theta }, position);
+      surfaceContext.globalAlpha = 1;
+    }
     surfaceContext.strokeStyle = routeColor;
     surfaceContext.lineWidth = 1.6;
     surfaceContext.setLineDash([3, 4]);
@@ -103,6 +120,40 @@ export function setupGlobe(
     });
   }
 
+  function canSpin() {
+    return spinEnabled && inView && !document.hidden && scale <= 1.05 && !cancelMotion &&
+      !pointers.size && !dialog?.open && !stage.matches(':focus-within') &&
+      !pins.querySelector('.globe-pin:hover');
+  }
+
+  function spin(now: number) {
+    spinFrame = 0;
+    if (!canSpin()) return;
+    const elapsed = now - lastSpin;
+    if (elapsed >= 32) {
+      phi = (phi - Math.min(elapsed, 80) * idleSpeed) % (2 * Math.PI);
+      paint();
+      lastSpin = now;
+    }
+    spinFrame = requestAnimationFrame(spin);
+  }
+
+  function postponeSpin() {
+    clearTimeout(spinTimer);
+    cancelAnimationFrame(spinFrame);
+    spinFrame = 0;
+    if (!canSpin()) return;
+    spinTimer = window.setTimeout(() => {
+      lastSpin = performance.now();
+      spinFrame = requestAnimationFrame(spin);
+    }, idleDelay);
+  }
+
+  function updateSpinControl() {
+    controls.spin.textContent = spinEnabled ? 'Pause spin' : 'Resume spin';
+    postponeSpin();
+  }
+
   function zoom(factor: number, anchor?: { x: number; y: number }) {
     const nextScale = clamp(scale * factor, 0.75, maximumScale);
     if (anchor) {
@@ -126,6 +177,7 @@ export function setupGlobe(
 
   function moveTo(target: GlobeCamera, duration = 850, approach = false): Promise<boolean> {
     cancelMotion?.();
+    postponeSpin();
     const start = camera();
     const rotation = Math.atan2(Math.sin(target.phi - start.phi), Math.cos(target.phi - start.phi));
     const tilt = target.theta - start.theta;
@@ -133,6 +185,7 @@ export function setupGlobe(
     if (reducedMotion.matches || Math.max(Math.abs(rotation), Math.abs(tilt), Math.abs(zoomDistance)) < 0.001) {
       ({ phi, theta, scale } = target);
       paint();
+      postponeSpin();
       return Promise.resolve(true);
     }
 
@@ -156,6 +209,7 @@ export function setupGlobe(
           frame = requestAnimationFrame(step);
         } else {
           cancelMotion = undefined;
+          postponeSpin();
           resolve(true);
         }
       }
@@ -183,8 +237,9 @@ export function setupGlobe(
         (width / 2 - 32) / Math.abs(point.x - width / 2),
         (height / 2 - 40) / Math.abs(point.y - height / 2));
     }
-    if (fit < 0.75 || nearest * fit <= pinDiameter) return false;
-    target.scale = Math.min(fit, Math.max(scale * 1.18, pinDiameter * 1.5 / nearest, 0.75));
+    if (fit < 0.75 || nearest * fit <= pinDiameter(fit)) return false;
+    const nextScale = Math.max(scale * 1.18, pinDiameter(scale) * 1.35 / nearest, .75);
+    target.scale = Math.min(fit, Math.max(nextScale, pinDiameter(nextScale) * 1.2 / nearest));
     showGlobe();
     void moveTo(target, 2800, true);
     return true;
@@ -206,6 +261,7 @@ export function setupGlobe(
     cancelMotion?.();
     canvas.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    postponeSpin();
     canvas.classList.add('dragging');
   });
   canvas.addEventListener('pointermove', event => {
@@ -227,6 +283,7 @@ export function setupGlobe(
   function clearPointer(event: PointerEvent) {
     pointers.delete(event.pointerId);
     if (pointers.size === 0) canvas.classList.remove('dragging');
+    postponeSpin();
   }
   canvas.addEventListener('lostpointercapture', clearPointer);
   canvas.addEventListener('pointercancel', clearPointer);
@@ -236,6 +293,7 @@ export function setupGlobe(
     event.preventDefault();
     cancelMotion?.();
     zoom(Math.exp(-clamp(event.deltaY, -100, 100) * 0.003), { x: event.clientX, y: event.clientY });
+    postponeSpin();
   }, { passive: false });
   canvas.addEventListener('keydown', event => {
     const actions: Record<string, () => void> = {
@@ -250,6 +308,7 @@ export function setupGlobe(
     cancelMotion?.();
     actions[event.key]();
     requestPaint();
+    postponeSpin();
   });
   function easeZoom(factor: number) {
     const zoom = { scale: clamp((buttonZoom?.scale ?? scale) * factor, 0.75, maximumScale) };
@@ -261,6 +320,25 @@ export function setupGlobe(
   controls.zoomIn.addEventListener('click', () => easeZoom(zoomStep));
   controls.zoomOut.addEventListener('click', () => easeZoom(1 / zoomStep));
   controls.reset.addEventListener('click', () => { void moveTo(initialView); });
+  controls.spin.addEventListener('click', () => {
+    spinEnabled = !spinEnabled;
+    updateSpinControl();
+  });
+  reducedMotion.addEventListener('change', () => {
+    if (reducedMotion.matches) spinEnabled = false;
+    updateSpinControl();
+  });
+  document.addEventListener('visibilitychange', postponeSpin);
+  stage.addEventListener('focusin', postponeSpin);
+  stage.addEventListener('focusout', () => window.queueMicrotask(postponeSpin));
+  pins.addEventListener('pointerover', postponeSpin);
+  pins.addEventListener('pointerout', () => window.queueMicrotask(postponeSpin));
+  dialog?.addEventListener('close', postponeSpin);
+  new IntersectionObserver(([entry]) => {
+    inView = entry.intersectionRatio >= .25;
+    postponeSpin();
+  }, { threshold: .25 }).observe(stage);
+  updateSpinControl();
 
   new ResizeObserver(([entry]) => {
     const nextWidth = Math.round(entry.contentRect.width);
@@ -268,15 +346,20 @@ export function setupGlobe(
     if (!nextWidth || !nextHeight || (width === nextWidth && height === nextHeight)) return;
     width = nextWidth;
     height = nextHeight;
-    surfaceCanvas.width = Math.round(width * dpr);
-    surfaceCanvas.height = Math.round(height * dpr);
+    overlay.width = Math.round(width * dpr);
+    overlay.height = Math.round(height * dpr);
     paint({ width, height });
-  }).observe(canvas.parentElement!);
+  }).observe(stage);
 
   window.addEventListener('portfolio-themechange', () => {
     routeColor = readRouteColor();
-    paint(palette());
+    paint({ ...palette(), ...(land ? { mapBrightness: 0 } : {}) });
   });
+
+  if (surfaceContext) void loadLandMask().then(mask => {
+    land = mask;
+    paint({ mapBrightness: 0 });
+  }).catch(error => console.warn('Could not load the detailed coastline.', error));
 
   // COBE decodes the land texture asynchronously and draws on the next update.
   window.setTimeout(requestPaint, 250);
@@ -285,7 +368,10 @@ export function setupGlobe(
     camera,
     moveTo,
     focus,
-    stop: () => cancelMotion?.(),
+    stop() {
+      cancelMotion?.();
+      postponeSpin();
+    },
     markerLocation: pinLayer.markerLocation,
     setContent(items: GlobePin[], arcs: Arc[], routes: Coordinates[][]) {
       pinLayer.setContent(items);

@@ -1,6 +1,7 @@
 import type { Arc } from 'cobe';
 import { coordinateLabel, type City, type Coordinates, type Journey } from './data';
 import { publicCities, publicJourneys } from './public-data';
+import { updateCities, updateJourneys } from './travel-updates';
 import type { atlasPreview } from './journal';
 import { reducedMotion, setupGlobe, type GlobeCamera } from './globe';
 import type { mountMap } from './map';
@@ -37,16 +38,16 @@ const placesButton = byId<HTMLButtonElement>('places-mode');
 const journeysButton = byId<HTMLButtonElement>('journeys-mode');
 const globeView = byId('globe-view');
 const globeCanvas = byId<HTMLCanvasElement>('globe');
-const globe = setupGlobe(globeCanvas, byId('surface-routes'), byId('globe-pins'), {
-  zoomIn: byId('zoom-in'), zoomOut: byId('zoom-out'), reset: byId('reset'),
+const globe = setupGlobe(globeCanvas, byId('globe-overlay'), byId('globe-pins'), {
+  zoomIn: byId('zoom-in'), zoomOut: byId('zoom-out'), reset: byId('reset'), spin: byId('spin'),
 }, showGlobe);
 if (!globe) {
   globeView.hidden = true;
   byId('globe-fallback').hidden = false;
 }
 
-let cities = publicCities;
-let journeys = publicJourneys;
+let cities = updateCities(publicCities);
+let journeys = updateJourneys(publicJourneys);
 const localPreviewCities = new WeakSet<City>();
 const journeyMode = { flight: 'Flight', drive: 'Road trip', rail: 'Train', cruise: 'Cruise' };
 
@@ -397,9 +398,12 @@ async function loadPreview() {
     const response = await fetch('/__atlas/journal', { cache: 'no-store' });
     if (!response.ok) return;
     const preview = await response.json() as ReturnType<typeof atlasPreview>;
-    for (const city of preview.cities) localPreviewCities.add(city);
-    cities = withLocalPreview(publicCities, preview.cities);
-    journeys = withLocalPreview(publicJourneys, preview.journeys);
+    cities = updateCities(withLocalPreview(publicCities, preview.cities));
+    journeys = updateJourneys(withLocalPreview(publicJourneys, preview.journeys));
+    const publishedIds = new Set(publicCities.map(city => city.id));
+    for (const city of cities) {
+      if (!publishedIds.has(city.id) && preview.cities.some(local => local.id === city.id)) localPreviewCities.add(city);
+    }
     byId('journal-label').hidden = false;
   } catch (error) {
     console.warn('Could not load local travel journal', error);

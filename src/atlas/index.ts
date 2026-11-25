@@ -28,11 +28,9 @@ if (legacyAtlasPath) {
   history.replaceState(null, '', `/${location.search}${location.hash}`);
 }
 
-const atlasAnchor = byId('atlas');
-const atlas = byId('atlas-panel');
+const atlas = byId('atlas');
 const overview = byId('overview');
 const portfolio = byId('portfolio');
-const portfolioFooter = byId('portfolio-footer');
 const detail = byId('detail');
 const emptyAtlas = byId('atlas-empty');
 const placesButton = byId<HTMLButtonElement>('places-mode');
@@ -56,7 +54,7 @@ let mode: 'places' | 'journeys' = 'places';
 let currentDetail = '';
 let map: ReturnType<typeof mountMap> | undefined;
 let selectedPlace = '';
-let returnCamera: GlobeCamera | undefined;
+let returnView: { camera?: GlobeCamera; scrollTop: number } | undefined;
 let departure: Animation | undefined;
 let renderedSearch = location.search;
 
@@ -79,22 +77,6 @@ function reveal(element: Element, delay = 0, duration = 480) {
     { opacity: 0, translate: '0 9px' },
     { opacity: 1, translate: '0 0' },
   ], { delay, duration, fill: 'backwards', easing: 'cubic-bezier(.22,.61,.36,1)' });
-}
-
-function revealGlobeOnScroll() {
-  if (!globe || reducedMotion.matches || !('IntersectionObserver' in window)) return;
-  const stage = byId('globe-stage');
-  const observer = new IntersectionObserver(([entry]) => {
-    if (!entry.isIntersecting || entry.intersectionRatio < .05) return;
-    observer.disconnect();
-    if (!reducedMotion.matches) {
-      stage.animate(
-        [{ opacity: .62, translate: '0 14px' }, { opacity: 1, translate: '0 0' }],
-        { duration: 640, easing: 'cubic-bezier(.22,.61,.36,1)' },
-      );
-    }
-  }, { rootMargin: `0px 0px -${Math.round(window.innerHeight * .4)}px 0px`, threshold: .05 });
-  observer.observe(stage);
 }
 
 function atlasUrl(values: Record<string, string> = {}) {
@@ -312,7 +294,6 @@ function renderRoute(moveFocus = false, animate = false) {
     map = undefined;
     detail.replaceChildren();
     portfolio.hidden = Boolean(nextDetail);
-    portfolioFooter.hidden = Boolean(nextDetail);
     detail.hidden = !nextDetail;
     if (city) showCity(city);
     else if (journey) showJourney(journey);
@@ -320,8 +301,8 @@ function renderRoute(moveFocus = false, animate = false) {
     const title = city?.name ?? journey?.name;
     document.title = title ? `${title} · Rohan Adepu` : 'Rohan Adepu';
     if (moveFocus) {
-      if (nextDetail) window.scrollTo({ top: 0, behavior: 'instant' });
-      else atlasAnchor.scrollIntoView({ block: 'start', behavior: 'instant' });
+      const top = nextDetail ? 0 : returnView?.scrollTop ?? 0;
+      window.scrollTo({ top, behavior: 'instant' });
       const viewButton = mode === 'journeys' ? journeysButton : placesButton;
       (nextDetail ? byId('detail-title') : viewButton).focus({ preventScroll: true });
     }
@@ -342,9 +323,9 @@ function renderRoute(moveFocus = false, animate = false) {
     }
   } else {
     renderOverview();
-    if (changed && returnCamera) {
-      void globe?.moveTo(returnCamera);
-      returnCamera = undefined;
+    if (changed && returnView) {
+      if (returnView.camera) void globe?.moveTo(returnView.camera);
+      returnView = undefined;
     }
     if (animateChange) reveal(overview);
   }
@@ -363,7 +344,7 @@ async function openAtlasLink(anchor: HTMLAnchorElement) {
   const { city, journey } = readDestination(new URL(anchor.href).searchParams);
   const target = city?.coordinates ?? globe?.markerLocation(anchor) ?? journey?.stops[0]?.coordinates;
   const fromOverview = !portfolio.hidden;
-  const before = fromOverview ? globe?.camera() : undefined;
+  const before = fromOverview ? { camera: globe?.camera(), scrollTop: window.scrollY } : undefined;
   if (globe && fromOverview && target) {
     if (city || journey) void import('./map').catch(() => {});
     showGlobe();
@@ -379,7 +360,7 @@ async function openAtlasLink(anchor: HTMLAnchorElement) {
     if (!(await fade.finished.then(() => true, () => false))) return;
   }
 
-  if (before && target) returnCamera = before;
+  if (before) returnView = before;
   history.pushState(null, '', anchor.href);
   departure?.cancel();
   departure = undefined;
@@ -428,18 +409,8 @@ async function loadPreview() {
 async function start() {
   if (import.meta.env.DEV) await loadPreview();
   const params = new URLSearchParams(location.search);
-  const opensAtlas = !location.hash &&
-    (legacyAtlasPath || params.has('city') || params.has('journey') || params.get('view') === 'journeys');
-  renderRoute(opensAtlas);
-  if (opensAtlas && !currentDetail) atlasAnchor.scrollIntoView({ block: 'start', behavior: 'instant' });
-  revealGlobeOnScroll();
+  const opensDetail = !location.hash && (params.has('city') || params.has('journey'));
+  renderRoute(opensDetail);
 }
-
-const slideSizes = new ResizeObserver(entries => {
-  for (const { target } of entries) {
-    if (target instanceof HTMLElement) target.style.setProperty('--slide-height', `${target.offsetHeight}px`);
-  }
-});
-document.querySelectorAll('.page-slide').forEach(slide => slideSizes.observe(slide));
 
 void start();

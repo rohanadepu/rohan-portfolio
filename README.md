@@ -1,6 +1,6 @@
 # Rohan Adepu · Portfolio and Travel Atlas
 
-The portfolio opens with an introduction, then a COBE travel atlas, a short profile, and selected projects. Cities and journeys open their own MapLibre journal views.
+The homepage puts a short profile beside a COBE travel atlas, with links to other projects below. Cities and journeys open their own MapLibre journal views.
 
 ## Run locally
 

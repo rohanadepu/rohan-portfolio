@@ -5,24 +5,32 @@
 }
 .atlas-toolbar {
   display: flex;
-  align-items: center;
-  min-height: 4.6rem;
-  padding-right: 3.5rem;
+  align-items: end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .75rem 1rem;
+  padding-bottom: .95rem;
+  border-bottom: 1px solid var(--line);
+}
+.atlas-toolbar h2 {
+  font: clamp(2.8rem, 4.5vw, 4.8rem)/.94 var(--serif);
+  letter-spacing: -.04em;
 }
 .view-switch { display: inline-flex; gap: .25rem; padding: .2rem; border: 1px solid var(--line); }
 .view-switch button { padding: .46rem .85rem; border: 0; background: transparent; font-weight: 600; font-size: .9rem; }
 .view-switch button[aria-pressed="true"] { color: var(--paper); background: var(--ink); }
-.atlas-layout { display: grid; align-items: start; margin-bottom: .75rem; }
-.globe-panel { min-width: 0; padding: 0 0 1rem; }
 .globe-view { position: relative; }
-.globe-stage { height: max(17rem, min(100vw, calc(100svh - 8rem))); position: relative; overflow: hidden; touch-action: pan-y; }
-.globe-stage { width: 100vw; margin-inline: calc(50% - 50vw); }
+.globe-stage { height: clamp(24rem, 66svh, 38rem); position: relative; overflow: hidden; touch-action: pan-y; }
 .globe-stage canvas, #globe-pins { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
 #globe { cursor: grab; }
 #globe.dragging { cursor: grabbing; }
 #globe:focus-visible { outline-offset: -3px; }
 #surface-routes { pointer-events: none; }
-#globe-pins { pointer-events: none; clip-path: circle(var(--pin-horizon, 0px)); }
+#globe-pins {
+  pointer-events: none;
+  /* Keep edge pins clickable when the canvas dimensions round to whole pixels. */
+  clip-path: circle(calc(var(--pin-horizon, 0px) + 1px));
+}
 .globe-pin {
   position: absolute;
   left: 0;
@@ -89,7 +97,7 @@
 .globe-actions button { min-width: 2.2rem; min-height: 2.2rem; padding: .2rem .45rem; border: 1px solid var(--line); background: var(--paper); }
 .globe-actions button:hover { background: var(--tint); }
 .globe-help { text-align: center; margin-top: .35rem; }
-.sample-label { font-size: .72rem; text-align: center; margin-bottom: 1rem; }
+.sample-label { font-size: .72rem; text-align: center; margin-top: .4rem; }
 #atlas-empty { text-align: center; }
 #detail { min-height: 100svh; padding-bottom: 2.25rem; }
 .detail-heading { padding: 1.25rem 0 1.65rem; }
@@ -157,6 +165,9 @@
 @media (max-width: 770px) {
   .field-entry { grid-template-columns: 1fr; }
   .visit { grid-column: auto; }
+}
+@media (max-width: 760px) {
+  .globe-stage { height: clamp(15rem, 87vw, 28rem); }
 }
 @media (max-width: 390px) {
   .view-switch button { padding-inline: .62rem; }

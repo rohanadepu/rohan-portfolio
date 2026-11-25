@@ -20,34 +20,28 @@
       <span class="theme-moon" aria-hidden="true">☾</span><span class="theme-sun" aria-hidden="true">☀︎</span>
     </button>
     <main id="portfolio">
-      <section class="personal-intro page-slide" aria-labelledby="personal-title">
-        <div class="intro-copy">
-          <p class="eyebrow intro-role">Software engineer</p>
-          <h1 class="intro-name" id="personal-title">
-            <span><span>Rohan</span></span>
-            <span><em>Adepu.</em></span>
-          </h1>
-          <p class="intro-summary">I build software for AI and data systems. Here’s what I’ve made and where I’ve been.</p>
-          <div class="intro-actions">
-            <a href="#projects">See projects</a>
-          </div>
-        </div>
-        <figure class="intro-portrait">
-          <img class="portrait" src="/portrait.jpg" alt="Rohan Adepu" width="800" height="800">
-        </figure>
-      </section>
+      <div class="home-layout">
+        <header class="profile" id="about">
+          <h1>Rohan Adepu</h1>
+          <p>I build software for AI and data systems.</p>
+          <nav class="profile-links" aria-label="Connect with Rohan">
+            <a href="https://github.com/rohanadepu">GitHub</a>
+            <a href="https://www.linkedin.com/in/rohan-adepu">LinkedIn</a>
+            <a href="/Rohan_Adepu_Resume.pdf">Résumé</a>
+            <a href="mailto:adepurohan@gmail.com">Email</a>
+          </nav>
+        </header>
 
-      <div class="slide-anchor" id="atlas"></div>
-      <section class="atlas-page page-slide" id="atlas-panel" aria-label="Travel atlas">
-        <div id="overview">
-          <div class="atlas-toolbar">
-            <div class="view-switch" role="group" aria-label="Globe view">
-              <button type="button" id="places-mode" aria-pressed="true">Places</button>
-              <button type="button" id="journeys-mode" aria-pressed="false">Journeys</button>
-            </div>
-          </div>
-          <div class="atlas-layout">
-            <section class="globe-panel" aria-label="Interactive globe">
+        <section class="atlas-page" id="atlas" aria-labelledby="atlas-title">
+          <div id="overview">
+            <header class="atlas-toolbar">
+              <h2 id="atlas-title">Places I’ve Been</h2>
+              <div class="view-switch" role="group" aria-label="Globe view">
+                <button type="button" id="places-mode" aria-pressed="true">Places</button>
+                <button type="button" id="journeys-mode" aria-pressed="false">Journeys</button>
+              </div>
+            </header>
+            <div class="globe-panel">
               <div class="globe-view" id="globe-view">
                 <div class="globe-stage" id="globe-stage">
                   <canvas id="globe" aria-label="Globe. Use arrow keys to rotate and plus or minus to zoom." tabindex="0"></canvas>
@@ -70,59 +64,22 @@
                 <p>The globe is unavailable on this device.</p>
                 <ul id="globe-fallback-links"></ul>
               </div>
-            </section>
+            </div>
+            <p id="atlas-empty" class="unavailable" hidden></p>
+            <p id="journal-label" class="eyebrow sample-label" hidden>Local journal preview</p>
           </div>
-          <p id="atlas-empty" class="unavailable" hidden></p>
-          <p id="journal-label" class="eyebrow sample-label" hidden>Local journal preview</p>
-        </div>
-        <nav class="navigation" aria-label="Site sections">
-          <a href="#atlas">Atlas</a>
-          <a href="#about">About</a>
-          <a href="#projects">Projects</a>
-          <a href="#interests">Interests</a>
-        </nav>
-      </section>
+        </section>
+      </div>
 
-      <div class="slide-anchor" id="about"></div>
-      <section class="portfolio-section page-slide about-slide" aria-labelledby="about-title">
-        <h2 id="about-title">About me</h2>
-        <div>
-          <p>At Goldman Sachs, I built tools that let HR leaders ask questions about workforce data in plain English. I worked on developer tools at Empower and studied computer science at CU Boulder.</p>
-          <div class="socials" aria-label="Connect with Rohan">
-            <a href="https://github.com/rohanadepu">GitHub</a>
-            <a href="https://www.linkedin.com/in/rohan-adepu">LinkedIn</a>
-            <a href="/Rohan_Adepu_Resume.pdf">Résumé</a>
-            <a href="mailto:adepurohan@gmail.com">Email</a>
-          </div>
-        </div>
-      </section>
-
-      <div class="slide-anchor" id="projects"></div>
-      <section class="portfolio-section page-slide projects-slide" aria-labelledby="projects-title">
-        <h2 id="projects-title">Projects</h2>
-        <div class="project-list">
-          <article class="project">
-            <h3><a href="https://github.com/rohanadepu/-Personal-Finance-Data-Aggregator-Insights-Platform">FinStack</a></h3>
-            <p>A self-hosted dashboard for accounts, spending, and budgets.</p>
-          </article>
-          <article class="project">
-            <h3><a href="https://github.com/rohanadepu/Real-Time-Event-Streaming-Analytics-Platform">Real-Time Event Streaming</a></h3>
-            <p>A Kafka and Flink pipeline for live metrics and anomaly detection.</p>
-          </article>
-          <article class="project">
-            <h3><a href="https://github.com/rohanadepu/FLVision">FLVision</a></h3>
-            <p>Research on federated learning for intrusion detection across private networks.</p>
-          </article>
-        </div>
-      </section>
-
-      <div class="slide-anchor" id="interests"></div>
-      <section class="portfolio-section page-slide interests-slide" aria-labelledby="interests-title">
-        <h2 id="interests-title">Interests</h2>
-        <p>Outside work, I lift, get outdoors, and work on cars.</p>
-      </section>
+      <nav class="project-links" id="projects" aria-labelledby="projects-title">
+        <h2 id="projects-title">Other projects</h2>
+        <ul>
+          <li><a href="https://github.com/rohanadepu/-Personal-Finance-Data-Aggregator-Insights-Platform">FinStack <span aria-hidden="true">↗</span></a></li>
+          <li><a href="https://github.com/rohanadepu/Real-Time-Event-Streaming-Analytics-Platform">Real-Time Event Streaming <span aria-hidden="true">↗</span></a></li>
+          <li><a href="https://github.com/rohanadepu/FLVision">FLVision <span aria-hidden="true">↗</span></a></li>
+        </ul>
+      </nav>
     </main>
-    <footer id="portfolio-footer"><span>Rohan Adepu</span><a href="#top">Back to top</a></footer>
     <main id="detail" hidden aria-labelledby="detail-title"></main>
   </div>
   <script type="module" src="/src/atlas/index.ts"></script>

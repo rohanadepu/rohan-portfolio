@@ -67,7 +67,6 @@ p { line-height: 1.65; }
   font: clamp(2.4rem, 4vw, 3.4rem)/1 var(--serif);
   letter-spacing: -.035em;
 }
-.profile p { margin-top: .28rem; color: var(--quiet); }
 .profile-links {
   display: flex;
   flex-wrap: wrap;
@@ -100,5 +99,6 @@ p { line-height: 1.65; }
 @media (max-width: 680px) {
   .profile { padding-inline-end: 0; }
   .profile-copy { padding-inline-end: 3.25rem; }
+  .profile-links { flex-basis: 100%; }
   .project-links h2 { flex-basis: 100%; }
 }
